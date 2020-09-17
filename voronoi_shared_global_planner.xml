@@ -1,0 +1,5 @@
+ <library path="lib/libshared_voronoi_global_planner_lib">
+  <class name="shared_voronoi_global_planner/SharedVoronoiGlobalPlanner" type="shared_voronoi_global_planner::SharedVoronoiGlobalPlanner" base_class_type="nav_core::BaseGlobalPlanner">
+    <description>This is a global planner plugin.</description>
+  </class>
+ </library>
