@@ -35,10 +35,11 @@ namespace shared_voronoi_global_planner
         bool initialized_ = false;
         voronoi_path::Map map;
         voronoi_path::voronoi_path voronoi_path;
-        bool map_received = false;
         double update_voronoi_rate = 0.3;
+        int num_paths = 2;
+        bool print_timings = false;
 
-        std::chrono::time_point<std::chrono::system_clock> prev_set_map_time;
+        // std::chrono::time_point<std::chrono::system_clock> prev_set_map_time;
 
         ros::NodeHandle nh;
         ros::Subscriber local_costmap_sub;
@@ -47,10 +48,12 @@ namespace shared_voronoi_global_planner
         ros::Publisher merged_costmap_pub;
         ros::Publisher global_path_pub;
         ros::Publisher alternate_path_pub;
+        ros::Timer voronoi_update_timer;
 
         void localCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg);
         void globalCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg);
         void globalCostmapUpdateCB(const map_msgs::OccupancyGridUpdate::ConstPtr &msg);
+        void updateVoronoiCB(const ros::TimerEvent& e);
     };
 }; // namespace shared_voronoi_global_planner
 

@@ -14,6 +14,13 @@ namespace shared_voronoi_global_planner
     {
     }
 
+    void SharedVoronoiGlobalPlanner::updateVoronoiCB(const ros::TimerEvent &e)
+    {
+        voronoi_path.print_timings = print_timings;
+        voronoi_path.mapToGraph(map);
+        merged_costmap_pub.publish(merged_costmap);
+    }
+
     void SharedVoronoiGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS *costmap_ros)
     {
         if (!initialized_)
@@ -27,6 +34,9 @@ namespace shared_voronoi_global_planner
             global_path_pub = nh.advertise<nav_msgs::Path>("plan", 1);
             alternate_path_pub = nh.advertise<nav_msgs::Path>("alternate_plan", 1);
 
+            //Create timer to update Voronoi diagram
+            voronoi_update_timer = nh.createTimer(ros::Duration(1.0 / update_voronoi_rate), &SharedVoronoiGlobalPlanner::updateVoronoiCB, this);
+
             ROS_INFO("Shared Voronoi Global Planner initialized");
         }
 
@@ -36,16 +46,18 @@ namespace shared_voronoi_global_planner
 
     bool SharedVoronoiGlobalPlanner::makePlan(const geometry_msgs::PoseStamped &start, const geometry_msgs::PoseStamped &goal, std::vector<geometry_msgs::PoseStamped> &plan)
     {
-        //In pixels of costmap
+        //Get start and end points in terms of global costmap pixels
         voronoi_path::GraphNode start_point((start.pose.position.x - merged_costmap.info.origin.position.x) / merged_costmap.info.resolution,
                                             (start.pose.position.y - merged_costmap.info.origin.position.y) / merged_costmap.info.resolution);
         voronoi_path::GraphNode end_point((goal.pose.position.x - merged_costmap.info.origin.position.x) / merged_costmap.info.resolution,
                                           (goal.pose.position.y - merged_costmap.info.origin.position.y) / merged_costmap.info.resolution);
 
-        std::vector<std::vector<voronoi_path::GraphNode>> all_paths = voronoi_path.getPath(start_point, end_point, 2);
+        //Get voronoi paths
+        std::vector<std::vector<voronoi_path::GraphNode>> all_paths = voronoi_path.getPath(start_point, end_point, num_paths);
 
         std::vector<geometry_msgs::PoseStamped> alt_plan;
 
+        //If paths are found
         if (!all_paths.empty())
         {
             std_msgs::Header header;
@@ -65,6 +77,9 @@ namespace shared_voronoi_global_planner
                 plan.push_back(new_pose);
             }
 
+            plan[0] = start;
+            plan.back() = goal;
+
             if (all_paths.size() == 2)
             {
                 for (int i = 0; i < all_paths[1].size(); i++)
@@ -79,36 +94,34 @@ namespace shared_voronoi_global_planner
 
                     alt_plan.push_back(new_pose);
                 }
+
+                alt_plan[0] = start;
+                alt_plan.back() = goal;
             }
 
-            plan[0] = start;
-            alt_plan[0] = start;
-            plan.back() = goal;
-            alt_plan.back() = goal;
+            //TODO: Check for collision between start and first, and end and last node
+
+            //Publish plan for visualization
+            nav_msgs::Path viz_path;
+            viz_path.header.stamp = ros::Time::now();
+            viz_path.header.frame_id = merged_costmap.header.frame_id;
+            viz_path.poses = plan;
+            global_path_pub.publish(viz_path);
+
+            viz_path.poses = alt_plan;
+            alternate_path_pub.publish(viz_path);
+
+            return true;
         }
 
         else
             return false;
-
-        //TODO: Check for collision between start and first, and end and last node
-
-        //Publish plan for visualization
-        nav_msgs::Path viz_path;
-        viz_path.header.stamp = ros::Time::now();
-        viz_path.header.frame_id = merged_costmap.header.frame_id;
-        viz_path.poses = plan;
-        global_path_pub.publish(viz_path);
-
-        viz_path.poses = alt_plan;
-        alternate_path_pub.publish(viz_path);
-
-        return true;
     }
 
     void SharedVoronoiGlobalPlanner::localCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg)
     {
-        if (((std::chrono::system_clock::now() - prev_set_map_time).count() / 1000000000.0) < (1.0 / update_voronoi_rate))
-            return;
+        // if (((std::chrono::system_clock::now() - prev_set_map_time).count() / 1000000000.0) < (1.0 / update_voronoi_rate))
+        //     return;
 
         local_costmap = *msg;
 
@@ -122,10 +135,16 @@ namespace shared_voronoi_global_planner
                 double rel_local_y = -merged_costmap.info.origin.position.y + local_costmap.info.origin.position.y;
 
                 //Costmap is rotated ccw 90deg in rviz
-
                 //Convert distance to pixels in global costmap resolution
                 int x_pixel_offset = rel_local_x / merged_costmap.info.resolution;
                 int y_pixel_offset = rel_local_y / merged_costmap.info.resolution;
+
+                std::vector<voronoi_path::GraphNode> local_vertices;
+                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset, y_pixel_offset));
+                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset));
+                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset + local_costmap.info.height));
+                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset, y_pixel_offset + local_costmap.info.height));
+                voronoi_path.setLocalVertices(local_vertices);
 
                 for (int i = 0; i < merged_costmap.data.size(); i++)
                 {
@@ -156,12 +175,6 @@ namespace shared_voronoi_global_planner
 
         map.frame_id = merged_costmap.header.frame_id;
         map.resolution = merged_costmap.info.resolution;
-        voronoi_path.print_timings = true;
-        voronoi_path.mapToGraph(map);
-
-        merged_costmap_pub.publish(merged_costmap);
-        map_received = true;
-        prev_set_map_time = std::chrono::system_clock::now();
     }
 
     void SharedVoronoiGlobalPlanner::globalCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg)
@@ -178,8 +191,6 @@ namespace shared_voronoi_global_planner
 
         map.frame_id = merged_costmap.header.frame_id;
         map.resolution = merged_costmap.info.resolution;
-        voronoi_path.print_timings = true;
-        voronoi_path.mapToGraph(map);
     }
 
     void SharedVoronoiGlobalPlanner::globalCostmapUpdateCB(const map_msgs::OccupancyGridUpdate::ConstPtr &msg)

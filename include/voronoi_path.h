@@ -98,6 +98,7 @@ namespace voronoi_path
         void printEdges();
         std::vector<std::vector<GraphNode>> getPath(GraphNode start, GraphNode end, int num_paths);
         std::vector<GraphNode> getBezierPath(GraphNode point1, GraphNode point2, GraphNode point3);
+        void setLocalVertices(std::vector<GraphNode> vertices);
 
         double hash_resolution = 0.1;
         int hash_length = 6;
@@ -117,6 +118,7 @@ namespace voronoi_path
         double open_list_time = 0, closed_list_time = 0;
         double copy_path_time = 0, find_path_time = 0;
         double edge_collision_time = 0;
+        std::vector<GraphNode> local_vertices;
 
         std::vector<jcv_point> fillOccupancyVector(int start_index, int num_pixels);
         std::string hash(double x, double y);
