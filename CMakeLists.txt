@@ -17,6 +17,8 @@ find_package(catkin REQUIRED COMPONENTS
   costmap_2d
 )
 
+find_package(OpenCV 3 REQUIRED)
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -122,6 +124,7 @@ INCLUDE_DIRS include
 include_directories(
 include
   ${catkin_INCLUDE_DIRS}
+  ${OPENCV_INCLUDE_DIRS}
 )
 
 
@@ -129,6 +132,7 @@ add_library(voronoi_path_planner
   src/voronoi_path.cpp
 )
 add_dependencies(voronoi_path_planner ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(voronoi_path_planner ${OPENCV_LIBS})
 
 ## Declare a C++ library
 add_library(${PROJECT_NAME}_lib

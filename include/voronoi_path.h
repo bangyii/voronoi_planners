@@ -13,6 +13,10 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <atomic>
+
+#include <opencv2/highgui.hpp>
+#include <opencv2/opencv.hpp>
 
 //TODO: Determine if paths are homotopically different
 //Check if there are any obstacles between paths?
@@ -93,12 +97,14 @@ namespace voronoi_path
     class voronoi_path
     {
     public:
+        voronoi_path();
         bool mapToGraph(Map map_);
         std::vector<std::vector<int>> getAdjList();
         void printEdges();
         std::vector<std::vector<GraphNode>> getPath(GraphNode start, GraphNode end, int num_paths);
         std::vector<GraphNode> getBezierPath(GraphNode point1, GraphNode point2, GraphNode point3);
         void setLocalVertices(std::vector<GraphNode> vertices);
+        bool isUpdatingVoronoi();
 
         double hash_resolution = 0.1;
         int hash_length = 6;
@@ -108,6 +114,7 @@ namespace voronoi_path
         int collision_threshold = 85;
         int pixels_to_skip = 0;
         double waypoint_sep = 2; //pixels
+        bool findObstacleCentroids();
 
 
     private:
@@ -119,6 +126,8 @@ namespace voronoi_path
         double copy_path_time = 0, find_path_time = 0;
         double edge_collision_time = 0;
         std::vector<GraphNode> local_vertices;
+        std::atomic<bool> updating_voronoi;
+        std::atomic<bool> is_planning;
 
         std::vector<jcv_point> fillOccupancyVector(int start_index, int num_pixels);
         std::string hash(double x, double y);

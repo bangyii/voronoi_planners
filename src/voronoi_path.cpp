@@ -7,9 +7,78 @@
 
 namespace voronoi_path
 {
+    voronoi_path::voronoi_path() : updating_voronoi(false), is_planning(false)
+    {
+    }
+
+    bool voronoi_path::isUpdatingVoronoi()
+    {
+        return updating_voronoi;
+    }
+
     void voronoi_path::setLocalVertices(std::vector<GraphNode> vertices)
     {
         local_vertices = vertices;
+    }
+
+    bool voronoi_path::findObstacleCentroids()
+    {
+        cv::Mat cv_map(map.height, map.width, CV_8UC1, cv::Scalar(0));
+
+        if (map.data.size() != 0)
+        {
+            auto copy_time = std::chrono::system_clock::now();
+            cv_map = cv::Mat(map.data, true).reshape(1, map.height);
+            std::vector<std::vector<cv::Point>> contours;
+            std::vector<cv::Vec4i> hierarchy;
+
+            // for (int i = 0; i < map.data.size(); i++)
+            // {
+            //     int curr_data = map.data[i];
+            //     if (curr_data < 0)
+            //         curr_data = 0;
+
+            //     cv_map.at<uchar>(int(i / map.width), int(i % map.width)) = curr_data;
+            // }
+
+            //Downscale to increase speed
+            cv::resize(cv_map, cv_map, cv::Size(), 0.25, 0.25);
+            cv::flip(cv_map, cv_map, 1);
+            cv::transpose(cv_map, cv_map);
+            cv::flip(cv_map, cv_map, 1);
+            // cv::imshow("window", cv_map);
+            // std::cout << cv_map.size() << std::endl;
+            // cv::waitKey(0);
+
+            cv::Canny(cv_map, cv_map, 50, 150, 3);
+            cv::findContours(cv_map, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
+
+            std::vector<cv::Moments> mu(contours.size());
+            for (int i = 0; i < contours.size(); i++)
+            {
+                mu[i] = moments(contours[i], false);
+            }
+
+            std::vector<cv::Point2f> mc(contours.size());
+            for (int i = 0; i < contours.size(); i++)
+            {
+                mc[i] = cv::Point2f(mu[i].m10 / mu[i].m00, mu[i].m01 / mu[i].m00);
+            }
+
+            cv::Mat drawing(cv_map.size(), CV_8UC3, cv::Scalar(255, 255, 255));
+            for (int i = 0; i < contours.size(); i++)
+            {
+                cv::Scalar color = cv::Scalar(167, 151, 0); // B G R values
+                drawContours(drawing, contours, i, color, 2, 8, hierarchy, 0, cv::Point());
+                circle(drawing, mc[i], 4, cv::Scalar(0, 0, 255), -1, 8, 0);
+            }
+
+            //TODO: Upsize back contour centers
+
+            std::cout << "Time to find contour " << (std::chrono::system_clock::now() - copy_time).count() / 1000000000.0 << std::endl;
+        }
+
+        return true;
     }
 
     std::vector<jcv_point> voronoi_path::fillOccupancyVector(int start_index, int num_pixels)
@@ -34,6 +103,7 @@ namespace voronoi_path
     bool voronoi_path::mapToGraph(Map map_)
     {
         auto start_time = std::chrono::system_clock::now();
+        updating_voronoi = true;
         //Reset all variables
         map = map_;
         edge_vector.clear();
@@ -41,8 +111,11 @@ namespace voronoi_path
         node_inf.clear();
 
         int size = map.data.size();
-        if (size == 0)
+        if (size == 0 || is_planning)
+        {
+            updating_voronoi = false;
             return false;
+        }
 
         auto loop_map_points = std::chrono::system_clock::now();
         // Loop through map to find occupied cells
@@ -52,18 +125,18 @@ namespace voronoi_path
         std::vector<std::future<std::vector<jcv_point>>> future_vector;
         int num_pixels = floor(size / num_threads);
         int start_pixel = 0;
-        for (int i = 0; i < num_threads; i++)
+
+        for (int i = 0; i < num_threads - 1; i++)
         {
-            //For last thread, take all remaining pixels
-            if (i == num_threads)
-                num_pixels = size - num_pixels * (int)(num_threads - 1);
-
+            start_pixel = i * num_pixels;
             future_vector.emplace_back(std::async(std::launch::async, &voronoi_path::fillOccupancyVector, this, start_pixel, num_pixels));
-
-            start_pixel = i * floor(size / num_threads);
         }
 
-        for (int i = 0; i < num_threads; i++)
+        //For last thread, take all remaining pixels
+        //This current thread is the nth thread
+        points_vec = fillOccupancyVector((num_threads - 1) * num_pixels, size - num_pixels * (num_threads - 1));
+
+        for (int i = 0; i < future_vector.size(); i++)
         {
             try
             {
@@ -74,6 +147,7 @@ namespace voronoi_path
             catch (const std::exception &e)
             {
                 std::cout << "Exception occurred with future, " << e.what() << std::endl;
+                updating_voronoi = false;
                 return false;
             }
         }
@@ -94,6 +168,7 @@ namespace voronoi_path
         if (!points)
         {
             std::cout << "Failed to allocate memory for points array" << std::endl;
+            updating_voronoi = false;
             return false;
         }
 
@@ -183,6 +258,8 @@ namespace voronoi_path
             std::cout << "Time taken to convert to edges: " << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << " seconds" << std::endl;
         }
 
+        updating_voronoi = false;
+
         return true;
     }
 
@@ -264,12 +341,23 @@ namespace voronoi_path
 
     std::vector<std::vector<GraphNode>> voronoi_path::getPath(GraphNode start, GraphNode end, int num_paths)
     {
+        //Block until voronoi is no longer being updated. Prevents issue where planning is done using an empty adjacency list
+        while (true)
+        {
+            if (!updating_voronoi)
+                break;
+        }
+
+        is_planning = true;
         auto start_time = std::chrono::system_clock::now();
         std::vector<std::vector<GraphNode>> path;
 
         int start_node, end_node;
         if (!getNearestNode(start, end, start_node, end_node))
+        {
+            is_planning = false;
             return path;
+        }
 
         std::vector<int> shortest_path;
         double cost;
@@ -356,6 +444,7 @@ namespace voronoi_path
         else
             std::cout << "Path could not be found" << std::endl;
 
+        is_planning = false;
         return path;
     }
 
@@ -480,14 +569,6 @@ namespace voronoi_path
 
                 cost_vec.clear();
                 potentialKth.clear();
-
-                //Only reset entire adj_list when k path changes
-                for (int i = 0; i < adj_list_modified_ind.size(); i++)
-                {
-                    adj_list[adj_list_modified_ind[i]] = adj_list_backup[adj_list_modified_ind[i]];
-                }
-                adj_list_modified_ind.clear();
-                adj_list_modified_ind.shrink_to_fit();
 
                 last_root_ind = 0;
 
@@ -663,9 +744,6 @@ namespace voronoi_path
                     }
                 }
 
-                if (potentialKth.size() == 0)
-                    break;
-
                 auto copy_kth = std::chrono::system_clock::now();
                 //Find minimum cost path
                 double min_cost = std::numeric_limits<double>::infinity();
@@ -708,6 +786,17 @@ namespace voronoi_path
                 if (path_unique)
                     kthPaths.push_back(potentialKth[copy_index]);
                 copy_kth_cum_time += (std::chrono::system_clock::now() - copy_kth).count() / 1000000000.0;
+
+                //Reset entire adj_list when k path changes
+                for (int i = 0; i < adj_list_modified_ind.size(); i++)
+                {
+                    adj_list[adj_list_modified_ind[i]] = adj_list_backup[adj_list_modified_ind[i]];
+                }
+                adj_list_modified_ind.clear();
+                adj_list_modified_ind.shrink_to_fit();
+
+                if (potentialKth.size() == 0)
+                    break;
             }
             all_paths.insert(all_paths.begin(), kthPaths.begin(), kthPaths.end());
         }
@@ -741,8 +830,6 @@ namespace voronoi_path
     bool voronoi_path::findShortestPath(int start_node, int end_node, std::vector<int> &path, double &cost)
     {
         auto start_time = std::chrono::system_clock::now();
-        // std::priority_queue<std::pair<int, NodeInfo>> closed_list;
-        // std::priority_queue<std::pair<int, NodeInfo>> open_list;
         std::vector<std::pair<int, NodeInfo>> closed_list;
         std::vector<std::pair<int, NodeInfo>> open_list;
         std::vector<bool> nodes_closed_bool(adj_list.size(), false);
