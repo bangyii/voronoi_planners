@@ -98,12 +98,12 @@ namespace voronoi_path
     {
     public:
         voronoi_path();
-        bool mapToGraph(Map map_);
+        bool mapToGraph(const Map &map_);
         std::vector<std::vector<int>> getAdjList();
         void printEdges();
-        std::vector<std::vector<GraphNode>> getPath(GraphNode start, GraphNode end, int num_paths);
-        std::vector<GraphNode> getBezierPath(GraphNode point1, GraphNode point2, GraphNode point3);
-        void setLocalVertices(std::vector<GraphNode> vertices);
+        std::vector<std::vector<GraphNode>> getPath(const GraphNode &start, const GraphNode &end, const int &num_paths);
+        std::vector<GraphNode> getBezierPath(const GraphNode &point1, const GraphNode &point2, const GraphNode &point3);
+        void setLocalVertices(const std::vector<GraphNode>& vertices);
         bool isUpdatingVoronoi();
 
         double hash_resolution = 0.1;
@@ -128,19 +128,20 @@ namespace voronoi_path
         std::vector<GraphNode> local_vertices;
         std::atomic<bool> updating_voronoi;
         std::atomic<bool> is_planning;
+        int num_nodes = 0;
 
-        std::vector<jcv_point> fillOccupancyVector(int start_index, int num_pixels);
-        std::string hash(double x, double y);
-        std::vector<double> dehash(std::string str);
-        bool getNearestNode(GraphNode start, GraphNode end, int &start_node, int &end_node);
-        bool kthShortestPaths(int start_node, int end_node, std::vector<int> shortestPath, std::vector<std::vector<int>> &all_paths, const int num_paths);
-        bool findShortestPath(int start_node, int end_node, std::vector<int> &path, double &cost);
+        std::vector<jcv_point> fillOccupancyVector(const int &start_index, const int &num_pixels);
+        std::string hash(const double &x, const double &y);
+        std::vector<double> dehash(const std::string &str);
+        bool getNearestNode(const GraphNode &start, const GraphNode &end, int &start_node, int &end_node);
+        bool kthShortestPaths(const int &start_node, const int &end_node, const std::vector<int> &shortestPath, std::vector<std::vector<int>> &all_paths, const int &num_paths);
+        bool findShortestPath(const int &start_node, const int &end_node, std::vector<int> &path, double &cost);
         void removeObstacleVertices();
         void removeCollisionEdges();
-        double vectorAngle(double vec1[2], double vec2[2]);
-        bool edgeCollides(GraphNode start, GraphNode end);
-        double manhattanDist(GraphNode a, GraphNode b);
-        double euclideanDist(GraphNode a, GraphNode b);
+        double vectorAngle(const double vec1[2], const double vec2[2]);
+        bool edgeCollides(const GraphNode &start, const GraphNode &end);
+        double manhattanDist(const GraphNode &a, const GraphNode &b);
+        double euclideanDist(const GraphNode &a, const GraphNode &b);
         int getNumberOfNodes();
     };
 

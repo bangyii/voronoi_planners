@@ -260,6 +260,6 @@ namespace shared_voronoi_global_planner
             map.data.insert(map.data.end(), make_move_iterator(temp_vec.begin()), make_move_iterator(temp_vec.end()));
         }
 
-        // std::cout << "Time taken to cleanup map " << (std::chrono::system_clock::now() - map_cleanup_time).count() / 1000000000.0 << std::endl;
+        std::cout << "Time taken to cleanup map " << (std::chrono::system_clock::now() - map_cleanup_time).count() / 1000000000.0 << std::endl;
     }
 } // namespace shared_voronoi_global_planner
