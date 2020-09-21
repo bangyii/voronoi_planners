@@ -34,6 +34,43 @@ namespace voronoi_path
         GraphNode() : x(0), y(0) {}
         GraphNode(double _x, double _y) : x(_x), y(_y) {}
         GraphNode(std::pair<double, double> in_pair) : x(in_pair.first), y(in_pair.second) {}
+
+        GraphNode operator*(const double &mult) const
+        {
+            return GraphNode(x * mult, y * mult);
+        }
+
+        GraphNode operator+(const double &incr) const
+        {
+            return GraphNode(x + incr, y + incr);
+        }
+
+        GraphNode operator-(const double &incr) const
+        {
+            return GraphNode(x - incr, y - incr);
+        }
+
+        GraphNode &operator+=(const GraphNode &incr)
+        {
+            x = x + incr.x;
+            y = y + incr.y;
+            return *this;
+        }
+
+        GraphNode operator+(const GraphNode &incr) const
+        {
+            return GraphNode(x + incr.x, y + incr.y);
+        }
+
+        GraphNode operator-(const GraphNode &incr) const
+        {
+            return GraphNode(x - incr.x, y - incr.y);
+        }
+
+        int getSquareMagnitude()
+        {
+            return pow(x, 2) + pow(y, 2);
+        }
     };
 
     /**
@@ -94,6 +131,24 @@ namespace voronoi_path
         }
     };
 
+    /**
+     * Struct used during the generation of Bezier curves using the shortest path's nodes
+     **/
+    struct FValue
+    {
+        double val;
+        int r1, c1, r2, c2;
+
+        FValue()
+        {
+            val = std::numeric_limits<double>::infinity();
+            r1 = -1;
+            c1 = -1;
+            r2 = -1;
+            c2 = -1;
+        }
+    };
+
     class voronoi_path
     {
     public:
@@ -102,8 +157,7 @@ namespace voronoi_path
         std::vector<std::vector<int>> getAdjList();
         void printEdges();
         std::vector<std::vector<GraphNode>> getPath(const GraphNode &start, const GraphNode &end, const int &num_paths);
-        std::vector<GraphNode> getBezierPath(const GraphNode &point1, const GraphNode &point2, const GraphNode &point3);
-        void setLocalVertices(const std::vector<GraphNode>& vertices);
+        void setLocalVertices(const std::vector<GraphNode> &vertices);
         bool isUpdatingVoronoi();
 
         double hash_resolution = 0.1;
@@ -116,7 +170,6 @@ namespace voronoi_path
         double waypoint_sep = 2; //pixels
         bool findObstacleCentroids();
 
-
     private:
         Map map;
         std::vector<jcv_edge> edge_vector;
@@ -126,9 +179,13 @@ namespace voronoi_path
         double copy_path_time = 0, find_path_time = 0;
         double edge_collision_time = 0;
         std::vector<GraphNode> local_vertices;
+        std::vector<int> factorials;
         std::atomic<bool> updating_voronoi;
         std::atomic<bool> is_planning;
         int num_nodes = 0;
+        int bezier_max_n = 10;
+        double min_node_sep_sq = 0.5;
+        double extra_point_distance = 0.5;
 
         std::vector<jcv_point> fillOccupancyVector(const int &start_index, const int &num_pixels);
         std::string hash(const double &x, const double &y);
@@ -143,6 +200,9 @@ namespace voronoi_path
         double manhattanDist(const GraphNode &a, const GraphNode &b);
         double euclideanDist(const GraphNode &a, const GraphNode &b);
         int getNumberOfNodes();
+        int factorial(int n);
+        int combination(int n, int r);
+        std::vector<GraphNode> bezierSubsection(std::vector<GraphNode> &points);
     };
 
 } // namespace voronoi_path

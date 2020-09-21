@@ -18,18 +18,27 @@ namespace shared_voronoi_global_planner
 
     void SharedVoronoiGlobalPlanner::updateVoronoiCB(const ros::WallTimerEvent &e)
     {
+        if (map.data.empty())
+        {
+            ROS_WARN("Map is still empty, skipping update of voronoi diagram");
+            return;
+        }
+
         voronoi_path.print_timings = print_timings;
         voronoi_path.mapToGraph(map);
         merged_costmap_pub.publish(merged_costmap);
+    }
 
-        // for (auto i : map.data)
-        // {
-        //     if (i < 0)
-        //     {
-        //         std::cout << "NEGATIVE FOUND" << std::endl;
-        //         break;
-        //     }
-        // }
+    void SharedVoronoiGlobalPlanner::updateVoronoiMapCB(const ros::WallTimerEvent &e)
+    {
+        map.height = merged_costmap.info.height;
+        map.width = merged_costmap.info.width;
+        map.frame_id = merged_costmap.header.frame_id;
+        map.resolution = merged_costmap.info.resolution;
+
+        map.data.clear();
+        map.data.insert(map.data.begin(), merged_costmap.data.begin(), merged_costmap.data.end());
+        threadedMapCleanup();
     }
 
     void SharedVoronoiGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS *costmap_ros)
@@ -47,6 +56,8 @@ namespace shared_voronoi_global_planner
 
             //Create timer to update Voronoi diagram
             voronoi_update_timer = nh.createWallTimer(ros::WallDuration(1.0 / update_voronoi_rate), &SharedVoronoiGlobalPlanner::updateVoronoiCB, this);
+            map_update_timer = nh.createWallTimer(ros::WallDuration(1.0/update_costmap_rate), &SharedVoronoiGlobalPlanner::updateVoronoiMapCB, this);
+            // prev_costmap_time = std::chrono::system_clock::now();
 
             ROS_INFO("Shared Voronoi Global Planner initialized");
         }
@@ -168,8 +179,6 @@ namespace shared_voronoi_global_planner
 
                 for (int i = 0; i < local_costmap.data.size(); i++)
                 {
-                    // int curr_x = i % local_costmap.info.width;
-                    // int curr_y = i / local_costmap.info.width;
                     int local_data = local_costmap.data[i];
 
                     if (local_data > costmap_threshold)
@@ -180,40 +189,45 @@ namespace shared_voronoi_global_planner
                     }
                 }
             }
+
+            // merged_costmap.data.clear();
+            // merged_costmap.data.insert(merged_costmap.data.begin(), map.data.begin(), map.data.end());
+
+            // merged_costmap_pub.publish(merged_costmap);
         }
-
-
-        merged_costmap.data.clear();
-        merged_costmap.data.insert(merged_costmap.data.begin(), map.data.begin(), map.data.end());
-
-        // map.height = merged_costmap.info.height;
-        // map.width = merged_costmap.info.width;
-        // map.frame_id = merged_costmap.header.frame_id;
-        // map.resolution = merged_costmap.info.resolution;
-        merged_costmap_pub.publish(merged_costmap);
     }
 
     void SharedVoronoiGlobalPlanner::globalCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg)
     {
+        // if ((std::chrono::system_clock::now() - prev_costmap_time).count() / 1000000000.0 < (1.0 / update_costmap_rate))
+        //     return;
+
         merged_costmap = *msg;
 
-        //Initialize voronoi graph
-        map.height = merged_costmap.info.height;
-        map.width = merged_costmap.info.width;
+        // //Initialize voronoi graph
+        // map.height = merged_costmap.info.height;
+        // map.width = merged_costmap.info.width;
+        // map.frame_id = merged_costmap.header.frame_id;
+        // map.resolution = merged_costmap.info.resolution;
 
-        map.data.clear();
-        map.data.insert(map.data.begin(), merged_costmap.data.begin(), merged_costmap.data.end());
-        threadedMapCleanup();
+        // map.data.clear();
+        // map.data.insert(map.data.begin(), merged_costmap.data.begin(), merged_costmap.data.end());
+        // threadedMapCleanup();
 
-        map.frame_id = merged_costmap.header.frame_id;
-        map.resolution = merged_costmap.info.resolution;
+        // prev_costmap_time = std::chrono::system_clock::now();
     }
 
     void SharedVoronoiGlobalPlanner::globalCostmapUpdateCB(const map_msgs::OccupancyGridUpdate::ConstPtr &msg)
     {
-        map.data.clear();
-        map.data.insert(map.data.begin(), msg->data.begin(), msg->data.end());
-        threadedMapCleanup();
+        // if ((std::chrono::system_clock::now() - prev_costmap_time).count() / 1000000000.0 < (1.0 / update_costmap_rate))
+        //     return;
+
+        // map.data.clear();
+        // map.data.insert(map.data.begin(), msg->data.begin(), msg->data.end());
+        // threadedMapCleanup();
+
+        // prev_costmap_time = std::chrono::system_clock::now();
+        merged_costmap.data = msg->data;
     }
 
     void SharedVoronoiGlobalPlanner::threadedMapCleanup()
@@ -221,6 +235,8 @@ namespace shared_voronoi_global_planner
         auto map_cleanup_time = std::chrono::system_clock::now();
         int num_threads = std::thread::hardware_concurrency();
         std::vector<std::future<std::vector<int>>> future_vector;
+        future_vector.reserve(num_threads);
+
         int size = map.data.size();
         int num_pixels = floor(size / num_threads);
         int start_pixel = 0;
@@ -235,6 +251,8 @@ namespace shared_voronoi_global_planner
                 std::async(
                     std::launch::async, [start_pixel, num_pixels](const voronoi_path::Map &map) {
                         std::vector<int> edited_map;
+                        edited_map.reserve(num_pixels);
+
                         for (int i = start_pixel; i < start_pixel + num_pixels; i++)
                         {
                             int cur_data = map.data[i];
@@ -260,6 +278,6 @@ namespace shared_voronoi_global_planner
             map.data.insert(map.data.end(), make_move_iterator(temp_vec.begin()), make_move_iterator(temp_vec.end()));
         }
 
-        std::cout << "Time taken to cleanup map " << (std::chrono::system_clock::now() - map_cleanup_time).count() / 1000000000.0 << std::endl;
+        // std::cout << "Time taken to cleanup map " << (std::chrono::system_clock::now() - map_cleanup_time).count() / 1000000000.0 << std::endl;
     }
 } // namespace shared_voronoi_global_planner
