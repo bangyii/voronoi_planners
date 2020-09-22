@@ -14,6 +14,7 @@
 #include <string>
 #include <map>
 #include <atomic>
+#include <complex>
 
 #include <opencv2/highgui.hpp>
 #include <opencv2/opencv.hpp>
@@ -38,6 +39,11 @@ namespace voronoi_path
         GraphNode operator*(const double &mult) const
         {
             return GraphNode(x * mult, y * mult);
+        }
+
+        GraphNode operator/(const double &mult) const
+        {
+            return GraphNode(x / mult, y / mult);
         }
 
         GraphNode operator+(const double &incr) const
@@ -67,9 +73,16 @@ namespace voronoi_path
             return GraphNode(x - incr.x, y - incr.y);
         }
 
-        int getSquareMagnitude()
+        int getMagnitude()
         {
-            return pow(x, 2) + pow(y, 2);
+            return sqrt(pow(x, 2) + pow(y, 2));
+        }
+
+        void setUnitVector()
+        {
+            double magnitude = sqrt(pow(x, 2) + pow(y, 2));
+            x /= magnitude;
+            y /= magnitude;
         }
     };
 
@@ -83,23 +96,23 @@ namespace voronoi_path
         double resolution;
         int width;
         int height;
-        struct origin
+        struct
         {
-            struct position
+            struct
             {
                 double x;
                 double y;
                 double z;
-            };
+            } position;
 
-            struct orientation
+            struct
             {
                 double x;
                 double y;
                 double z;
                 double w;
-            };
-        };
+            } orientation;
+        } origin;
 
         std::vector<int> data;
 
@@ -168,24 +181,38 @@ namespace voronoi_path
         int collision_threshold = 85;
         int pixels_to_skip = 0;
         double waypoint_sep = 2; //pixels
-        bool findObstacleCentroids();
+        std::vector<std::complex<double>> findObstacleCentroids();
 
     private:
         Map map;
         std::vector<jcv_edge> edge_vector;
         std::vector<std::vector<int>> adj_list;
         std::vector<GraphNode> node_inf;
-        double open_list_time = 0, closed_list_time = 0;
-        double copy_path_time = 0, find_path_time = 0;
-        double edge_collision_time = 0;
         std::vector<GraphNode> local_vertices;
+
+        //Centers of centroids in complex form, for use when calculating homotopy classes only
+        std::vector<std::complex<double>> centers;
+
+        //bottom left and top right of current map
+        std::complex<double> BL = std::complex<double>(0, 0);
+        std::complex<double> TR = std::complex<double>(1, 1);
+
         std::vector<int> factorials;
         std::atomic<bool> updating_voronoi;
         std::atomic<bool> is_planning;
+        double open_list_time = 0, closed_list_time = 0;
+        double copy_path_time = 0, find_path_time = 0;
+        double edge_collision_time = 0;
         int num_nodes = 0;
         int bezier_max_n = 10;
-        double min_node_sep_sq = 0.5;
-        double extra_point_distance = 0.5;
+        double open_cv_scale = 0.25;
+        double h_class_threshold = 0.2;
+
+        //Minimum separation between nodes. If nodes are less than this value (m) apart, they will be cleaned up
+        double min_node_sep_sq = 1.0;
+
+        //Distance to put the extra point which is used to ensure continuity, units meter
+        double extra_point_distance = 1.0;
 
         std::vector<jcv_point> fillOccupancyVector(const int &start_index, const int &num_pixels);
         std::string hash(const double &x, const double &y);
@@ -203,6 +230,9 @@ namespace voronoi_path
         int factorial(int n);
         int combination(int n, int r);
         std::vector<GraphNode> bezierSubsection(std::vector<GraphNode> &points);
+
+        std::complex<double> fNaught(const std::complex<double> &z, const int &n);
+        std::complex<double> calcHomotopyClass(const std::vector<int> &path_);
     };
 
 } // namespace voronoi_path

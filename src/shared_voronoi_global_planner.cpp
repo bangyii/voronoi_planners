@@ -35,6 +35,8 @@ namespace shared_voronoi_global_planner
         map.width = merged_costmap.info.width;
         map.frame_id = merged_costmap.header.frame_id;
         map.resolution = merged_costmap.info.resolution;
+        map.origin.position.x = merged_costmap.info.origin.position.x;
+        map.origin.position.y = merged_costmap.info.origin.position.y;
 
         map.data.clear();
         map.data.insert(map.data.begin(), merged_costmap.data.begin(), merged_costmap.data.end());
@@ -53,6 +55,8 @@ namespace shared_voronoi_global_planner
             merged_costmap_pub = nh.advertise<nav_msgs::OccupancyGrid>("merged_costmap", 1);
             global_path_pub = nh.advertise<nav_msgs::Path>("plan", 1);
             alternate_path_pub = nh.advertise<nav_msgs::Path>("alternate_plan", 1);
+            // centroid_pub = nh.advertise<nav_msgs::Path>("/centroids", 1);
+
 
             //Create timer to update Voronoi diagram
             voronoi_update_timer = nh.createWallTimer(ros::WallDuration(1.0 / update_voronoi_rate), &SharedVoronoiGlobalPlanner::updateVoronoiCB, this);
@@ -68,7 +72,32 @@ namespace shared_voronoi_global_planner
 
     bool SharedVoronoiGlobalPlanner::makePlan(const geometry_msgs::PoseStamped &start, const geometry_msgs::PoseStamped &goal, std::vector<geometry_msgs::PoseStamped> &plan)
     {
-        // voronoi_path.findObstacleCentroids();
+        // //Centers are in terms of pixel of original image. Not in meters
+        // std::vector<voronoi_path::GraphNode> centers = voronoi_path.findObstacleCentroids();
+        // nav_msgs::Path centroid_path;
+        // centroid_path.header.stamp = ros::Time::now();
+        // centroid_path.header.frame_id = start.header.frame_id;
+        // for(auto centroids : centers)
+        // {
+        //     geometry_msgs::PoseStamped new_pose;
+        //     new_pose.header = centroid_path.header;
+        //     new_pose.pose.orientation.w = 1;
+
+        //     new_pose.pose.position.x = centroids.x * map.resolution - map.origin.position.x;
+        //     new_pose.pose.position.y = centroids.y * map.resolution - map.origin.position.y;
+        //     new_pose.pose.position.z = 0;
+            
+        //     if(isnan(new_pose.pose.position.x))
+        //         new_pose.pose.position.x = -100;
+            
+        //     if(isnan(new_pose.pose.position.y))
+        //         new_pose.pose.position.y = -100;
+
+        //     centroid_path.poses.push_back(new_pose);
+        // }
+        // std::cout << "Publishing centroid path\n";
+        // centroid_pub.publish(centroid_path);
+
         //Get start and end points in terms of global costmap pixels
         voronoi_path::GraphNode start_point((start.pose.position.x - merged_costmap.info.origin.position.x) / merged_costmap.info.resolution,
                                             (start.pose.position.y - merged_costmap.info.origin.position.y) / merged_costmap.info.resolution);

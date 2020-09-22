@@ -54,6 +54,8 @@ namespace shared_voronoi_global_planner
         ros::WallTimer voronoi_update_timer;
         ros::WallTimer map_update_timer;
 
+        ros::Publisher centroid_pub;
+
         void localCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg);
         void globalCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg);
         void globalCostmapUpdateCB(const map_msgs::OccupancyGridUpdate::ConstPtr &msg);

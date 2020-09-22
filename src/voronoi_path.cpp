@@ -21,64 +21,72 @@ namespace voronoi_path
         local_vertices = vertices;
     }
 
-    bool voronoi_path::findObstacleCentroids()
+    std::vector<std::complex<double>> voronoi_path::findObstacleCentroids()
     {
-        cv::Mat cv_map(map.height, map.width, CV_8UC1, cv::Scalar(0));
+        // cv::Mat cv_map(map.height, map.width, CV_32SC1);
 
         if (map.data.size() != 0)
         {
             auto copy_time = std::chrono::system_clock::now();
-            cv_map = cv::Mat(map.data, true).reshape(1, map.height);
-            std::vector<std::vector<cv::Point>> contours;
-            std::vector<cv::Vec4i> hierarchy;
 
-            // for (int i = 0; i < map.data.size(); ++i)
-            // {
-            //     int curr_data = map.data[i];
-            //     if (curr_data < 0)
-            //         curr_data = 0;
+            cv::Mat cv_map = cv::Mat(map.data).reshape(0, map.height);
+            cv_map.convertTo(cv_map, CV_8UC1);
 
-            //     cv_map.at<uchar>(int(i / map.width), int(i % map.width)) = curr_data;
-            // }
-
-            //Downscale to increase speed
-            cv::resize(cv_map, cv_map, cv::Size(), 0.25, 0.25);
+            //Downscale to increase contour finding speed
+            cv::resize(cv_map, cv_map, cv::Size(), open_cv_scale, open_cv_scale);
             cv::flip(cv_map, cv_map, 1);
             cv::transpose(cv_map, cv_map);
             cv::flip(cv_map, cv_map, 1);
-            // cv::imshow("window", cv_map);
-            // std::cout << cv_map.size() << std::endl;
-            // cv::waitKey(0);
+            std::cout << "Time to copy map data " << (std::chrono::system_clock::now() - copy_time).count() / 1000000000.0 << std::endl;
 
+            auto start_time = std::chrono::system_clock::now();
+
+            std::vector<std::vector<cv::Point>> contours;
+            std::vector<cv::Vec4i> hierarchy;
             cv::Canny(cv_map, cv_map, 50, 150, 3);
             cv::findContours(cv_map, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
 
+            //Get center of centroids
             std::vector<cv::Moments> mu(contours.size());
+            centers = std::vector<std::complex<double>>(contours.size());
             for (int i = 0; i < contours.size(); ++i)
             {
                 mu[i] = moments(contours[i], false);
+
+                //Centroids in terms of pixels on the original image
+                centers[i] = std::complex<double>(-mu[i].m01 / mu[i].m00 / open_cv_scale, -mu[i].m10 / mu[i].m00 / open_cv_scale);
             }
 
-            std::vector<cv::Point2f> mc(contours.size());
-            for (int i = 0; i < contours.size(); ++i)
+            //Delete NaN centroids
+            auto it = centers.begin();
+            while (it != centers.end())
             {
-                mc[i] = cv::Point2f(mu[i].m10 / mu[i].m00, mu[i].m01 / mu[i].m00);
+                if (isnan(it->real()) || isnan(it->imag()))
+                {
+                    it = centers.erase(it);
+                    continue;
+                }
+
+                ++it;
             }
 
-            cv::Mat drawing(cv_map.size(), CV_8UC3, cv::Scalar(255, 255, 255));
-            for (int i = 0; i < contours.size(); ++i)
-            {
-                cv::Scalar color = cv::Scalar(167, 151, 0); // B G R values
-                drawContours(drawing, contours, i, color, 2, 8, hierarchy, 0, cv::Point());
-                circle(drawing, mc[i], 4, cv::Scalar(0, 0, 255), -1, 8, 0);
-            }
+            // std::cout << "Center 1 : " << centers[0].x << "\t" << centers[0].y << "\n";
 
+            // cv::Mat drawing(cv_map.size(), CV_8UC3, cv::Scalar(255, 255, 255));
+            // for (int i = 0; i < contours.size(); ++i)
+            // {
+            //     drawContours(drawing, contours, i, cv::Scalar(0, 0, 0), 2, 8, hierarchy, 0, cv::Point());
+            //     circle(drawing, mc[i], 4, cv::Scalar(0, 0, 255), -1, 8, 0);
+            // }
+
+            // cv::imshow("window", drawing);
+            // cv::waitKey(0);
             //TODO: Upsize back contour centers
 
-            std::cout << "Time to find contour " << (std::chrono::system_clock::now() - copy_time).count() / 1000000000.0 << std::endl;
+            std::cout << "Time to find contour " << (std::chrono::system_clock::now() - start_time).count() / 1000000000.0 << std::endl;
         }
 
-        return true;
+        return centers;
     }
 
     //TODO: Pass by ref?
@@ -112,6 +120,10 @@ namespace voronoi_path
         edge_vector.clear();
         adj_list.clear();
         node_inf.clear();
+
+        //Set bottom left and top right for use during homotopy check
+        BL = std::complex<double>(0, 0);
+        TR = std::complex<double>(map.width - 1, map.height - 1);
 
         int size = map.data.size();
         if (size == 0 || is_planning)
@@ -265,6 +277,9 @@ namespace voronoi_path
             std::cout << "Time taken to convert to edges: " << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << " seconds" << std::endl;
         }
 
+        //Get centroids after map has been updated
+        findObstacleCentroids();
+
         updating_voronoi = false;
         num_nodes = adj_list.size();
 
@@ -399,10 +414,9 @@ namespace voronoi_path
 
                 std::vector<GraphNode> sub_nodes;
                 std::vector<GraphNode> prev_2_nodes;
-                int i = 0;
 
                 //For all nodes in path
-                for (i = 1; i < num_of_nodes; ++i)
+                for (int i = 1; i < num_of_nodes; ++i)
                 {
                     //Add previous node and extra node if sub_nodes was recently reset due to collision or initialization
                     if (sub_nodes.size() == 0)
@@ -410,16 +424,16 @@ namespace voronoi_path
                         sub_nodes.push_back(all_path_nodes[j][i - 1]);
 
                         //Calculate extra node based on previous subsection's gradient
-                        if (i > 1 && !prev_2_nodes.empty())
+                        if (i > 1 && prev_2_nodes.size() == 2)
                         {
                             GraphNode dir(prev_2_nodes[1] - prev_2_nodes[0]);
-                            int square_magnitude = dir.getSquareMagnitude();
+                            dir.setUnitVector();
 
                             //Extra point is collinear with prev[0] and prev[1], but further along than p[1]
-                            sub_nodes.push_back(prev_2_nodes[1] + dir * extra_point_distance);
+                            sub_nodes.push_back(prev_2_nodes[1] + dir * extra_point_distance * map.resolution);
 
                             //Do not insert if collision occurs when extra point is added
-                            if(edgeCollides(sub_nodes[sub_nodes.size() - 2], sub_nodes.back()))
+                            if (edgeCollides(sub_nodes[sub_nodes.size() - 2], sub_nodes.back()))
                                 sub_nodes.pop_back();
 
                             prev_2_nodes.clear();
@@ -431,13 +445,16 @@ namespace voronoi_path
                         !edgeCollides(sub_nodes[0], all_path_nodes[j][i]) &&
                         sub_nodes.size() < bezier_max_n)
                     {
-                        //Only add node if it far enough than threshold, or if it is the last node
                         sub_nodes.push_back(all_path_nodes[j][i]);
                     }
 
-                    //Collision happened, find sub path with current sub nodes
+                    //Collision happened or limit reached, find sub path with current sub nodes
                     else
                     {
+                        //Retrace back i value to prevent skipping a node
+                        --i;
+
+                        //Calculate the bezier subsection
                         std::vector<GraphNode> temp_bezier = bezierSubsection(sub_nodes);
                         bezier_path.insert(bezier_path.end(), temp_bezier.begin(), temp_bezier.end());
                         prev_2_nodes.insert(prev_2_nodes.begin(), sub_nodes.end() - 2, sub_nodes.end());
@@ -454,6 +471,9 @@ namespace voronoi_path
                 }
                 path.push_back(bezier_path);
             }
+
+            //No bezier interpolation
+            // path = all_path_nodes;
 
             if (print_timings)
                 std::cout << "Time taken to find all paths, including time to find nearest node: " << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << "s\n";
@@ -549,6 +569,64 @@ namespace voronoi_path
         if (print_timings)
             std::cout << "Time taken to find nearest node: " << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << "s\n";
         return true;
+    }
+
+    std::complex<double> voronoi_path::fNaught(const std::complex<double> &z, const int &n)
+    {
+        //a - b = 0
+        //a + b = n - 1
+        //TODO: Implement check that this is a valid combination of a and b
+        double a = (n - 1) / 2.0;
+        double b = a;
+        return std::pow((z - BL), a) + std::pow((z - TR), b);
+    }
+
+    std::complex<double> voronoi_path::calcHomotopyClass(const std::vector<int> &path_)
+    {
+        std::vector<std::complex<double>> path;
+        path.reserve(path_.size());
+
+        //Convert path to complex path, emplace back causes crashing
+        for (auto node : path_)
+            path.emplace_back(node_inf[node].x, node_inf[node].y);
+
+        std::complex<double> path_sum(0,0);
+        //Go through each edge of the path
+        for (int i = 1; i < path.size(); ++i)
+        {
+            std::complex<double> edge_sum(0, 0);
+            //Each edge must iterate through all obstacles
+            for (auto obs : centers)
+            {
+                //Calculate Al value, initialize with 1,1
+                std::complex<double> al_denom_prod(1, 1);
+                for (auto excl_obs : centers)
+                {
+                    if (excl_obs == obs)
+                        continue;
+
+                    al_denom_prod *= (obs - excl_obs);
+                }
+                std::complex<double> al = fNaught(obs, centers.size()) / al_denom_prod;
+
+                double real_part = std::log(std::abs(path[i] - obs)) - std::log(std::abs(path[i - 1] - obs));
+                double im_part = std::arg(path[i] - obs) - std::arg(path[i - 1] - obs);
+
+                //Get smallest angle
+                while (im_part > M_PI)
+                    im_part -= 2 * M_PI;
+
+                while (im_part < -M_PI)
+                    im_part += 2 * M_PI;
+
+                edge_sum += (std::complex<double>(real_part, im_part) * al);
+            }
+            //Add this edge's sum to the path sum
+            path_sum += edge_sum;
+
+        }
+
+        return path_sum;
     }
 
     //TODO: There is issue with path reversing then going towards first shortest path
@@ -777,8 +855,36 @@ namespace voronoi_path
                 {
                     if (cost_vec[min_ind] < min_cost)
                     {
-                        min_cost = cost_vec[min_ind];
-                        copy_index = min_ind;
+
+                        //Calculate homotopy class for all previously generated paths
+                        std::vector<std::complex<double>> homotopy_classes;
+                        for (auto homotopy_paths : kthPaths)
+                        {
+                            homotopy_classes.emplace_back(calcHomotopyClass(homotopy_paths));
+
+                        }
+
+
+
+                        //Get the current potential path's homotopy class
+                        std::complex<double> curr_h_class = calcHomotopyClass(potentialKth[min_ind]);
+
+
+
+                        //Check that the path is in unique homotopy class compared to previous kthPaths
+                        //Iterate through all path's homotopy class
+                        for (auto h_class : homotopy_classes)
+                        {
+                            //This homotopy class path does not exist yet, assign min_cost and copy_index
+                            if (std::abs(curr_h_class - h_class) > h_class_threshold)
+                            {
+
+                                min_cost = cost_vec[min_ind];
+                                copy_index = min_ind;
+                            }
+                        }
+
+
                     }
                 }
 
@@ -1003,7 +1109,7 @@ namespace voronoi_path
         //Left right order is the same as in image
         //Meaning map.data reads from image from bottom of image, upwards, left to right
 
-        //This method is slower
+        // //This method is slower
         // auto it = edge_vector.begin();
         // while (it < edge_vector.end())
         // {
@@ -1016,7 +1122,7 @@ namespace voronoi_path
         //         if (map.data[pixel] > collision_threshold)
         //         {
         //             it = edge_vector.erase(it);
-        //             break;
+        //             continue;
         //         }
         //     }
 
@@ -1063,10 +1169,9 @@ namespace voronoi_path
 
     void voronoi_path::removeCollisionEdges()
     {
-        //This method is slower
-
+        // //This method is slower
         // auto it = edge_vector.begin();
-        // while (it < edge_vector.end())
+        // while (it != edge_vector.end())
         // {
         //     jcv_edge curr_edge = *it;
 
@@ -1075,7 +1180,10 @@ namespace voronoi_path
 
         //     //If vertex pixel in map is not free, remove this edge
         //     if (edgeCollides(start, end))
+        //     {
         //         it = edge_vector.erase(it);
+        //         continue;
+        //     }
 
         //     ++it;
         // }
@@ -1198,7 +1306,7 @@ namespace voronoi_path
         auto it = points.begin() + 1;
         double curr_x = -1;
         double curr_y = -1;
-        double pixel_threshold = min_node_sep_sq / map.resolution;
+        double pixel_threshold = min_node_sep_sq * map.resolution;
         while (it < points.end())
         {
             if (curr_x < 0 && curr_y < 0)
