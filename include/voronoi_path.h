@@ -197,14 +197,15 @@ namespace voronoi_path
         std::complex<double> BL = std::complex<double>(0, 0);
         std::complex<double> TR = std::complex<double>(1, 1);
 
-        std::vector<int> factorials;
         std::atomic<bool> updating_voronoi;
         std::atomic<bool> is_planning;
         double open_list_time = 0, closed_list_time = 0;
         double copy_path_time = 0, find_path_time = 0;
         double edge_collision_time = 0;
         int num_nodes = 0;
-        int bezier_max_n = 10;
+
+        //26 choose 13 is 10400600, 0.5% of int's max value, hard limit with leeway to prevent possible int overflow
+        int bezier_max_n = 26;
         double open_cv_scale = 0.25;
         double h_class_threshold = 0.2;
 
@@ -227,8 +228,7 @@ namespace voronoi_path
         double manhattanDist(const GraphNode &a, const GraphNode &b);
         double euclideanDist(const GraphNode &a, const GraphNode &b);
         int getNumberOfNodes();
-        int factorial(int n);
-        int combination(int n, int r);
+        int binomialCoeff(const int &n, const int &k_);
         std::vector<GraphNode> bezierSubsection(std::vector<GraphNode> &points);
 
         std::complex<double> fNaught(const std::complex<double> &z, const int &n);

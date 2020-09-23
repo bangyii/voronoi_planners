@@ -590,7 +590,7 @@ namespace voronoi_path
         for (auto node : path_)
             path.emplace_back(node_inf[node].x, node_inf[node].y);
 
-        std::complex<double> path_sum(0,0);
+        std::complex<double> path_sum(0, 0);
         //Go through each edge of the path
         for (int i = 1; i < path.size(); ++i)
         {
@@ -623,7 +623,6 @@ namespace voronoi_path
             }
             //Add this edge's sum to the path sum
             path_sum += edge_sum;
-
         }
 
         return path_sum;
@@ -861,15 +860,10 @@ namespace voronoi_path
                         for (auto homotopy_paths : kthPaths)
                         {
                             homotopy_classes.emplace_back(calcHomotopyClass(homotopy_paths));
-
                         }
-
-
 
                         //Get the current potential path's homotopy class
                         std::complex<double> curr_h_class = calcHomotopyClass(potentialKth[min_ind]);
-
-
 
                         //Check that the path is in unique homotopy class compared to previous kthPaths
                         //Iterate through all path's homotopy class
@@ -883,8 +877,6 @@ namespace voronoi_path
                                 copy_index = min_ind;
                             }
                         }
-
-
                     }
                 }
 
@@ -1276,25 +1268,25 @@ namespace voronoi_path
         return num_nodes;
     }
 
-    int voronoi_path::factorial(int n)
+    int voronoi_path::binomialCoeff(const int &n, const int &k_)
     {
-        if (factorials.size() == 0)
+        //https://www.geeksforgeeks.org/space-and-time-efficient-binomial-coefficient/
+        int res = 1;
+        int k = k_;
+
+        // Since C(n, k) = C(n, n-k)
+        if (k > n - k)
+            k = n - k;
+
+        // Calculate value of
+        // [n * (n-1) *---* (n-k+1)] / [k * (k-1) *----* 1]
+        for (int i = 0; i < k; ++i)
         {
-            factorials.push_back(1);
-            factorials.push_back(1);
+            res *= (n - i);
+            res /= (i + 1);
         }
 
-        //Factorial has been calculated before
-        if (n < factorials.size())
-            return factorials[n];
-
-        else
-            return n * factorial(n - 1);
-    }
-
-    int voronoi_path::combination(int n, int r)
-    {
-        return factorial(n) / (factorial(n - r) * factorial(r));
+        return res;
     }
 
     std::vector<GraphNode> voronoi_path::bezierSubsection(std::vector<GraphNode> &points)
@@ -1331,10 +1323,10 @@ namespace voronoi_path
         std::vector<int> combos(n + 1);
         std::vector<GraphNode> bezier_path;
 
-        //Calculate all required nCr
+        //Calculate all required nCk
         for (int i = 0; i < n + 1; ++i)
         {
-            combos[i] = combination(n, i);
+            combos[i] = binomialCoeff(n, i);
         }
 
         //20 points bezier interpolation
