@@ -91,12 +91,12 @@ namespace shared_voronoi_global_planner
         double h_class_threshold = 0.2;
 
         /**
-         * Minimum separation between nodes. If nodes are less than this value (m) apart, they will be cleaned up
+         * Minimum separation between nodes. If nodes are less than this value (m^2) apart, they will be cleaned up
          **/
         double min_node_sep_sq = 1.0;
 
         /**
-         * Distance to put the extra point which is used to ensure continuity, units meter
+         * Distance (m) to put the extra point which is used to ensure continuity
          **/
         double extra_point_distance = 1.0;
 

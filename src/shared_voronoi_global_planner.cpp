@@ -9,12 +9,12 @@ PLUGINLIB_EXPORT_CLASS(shared_voronoi_global_planner::SharedVoronoiGlobalPlanner
 namespace shared_voronoi_global_planner
 {
     SharedVoronoiGlobalPlanner::SharedVoronoiGlobalPlanner()
-        : nh("~" + std::string("shared_voronoi_global_planner"))
+        : nh("~" + std::string("SharedVoronoiGlobalPlanner"))
     {
     }
 
     SharedVoronoiGlobalPlanner::SharedVoronoiGlobalPlanner(std::string name, costmap_2d::Costmap2DROS *costmap_ros)
-        : nh("~" + std::string("shared_voronoi_global_planner"))
+        : nh("~" + std::string("SharedVoronoiGlobalPlanner"))
     {
     }
 
