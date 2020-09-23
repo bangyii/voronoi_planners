@@ -8,11 +8,13 @@ PLUGINLIB_EXPORT_CLASS(shared_voronoi_global_planner::SharedVoronoiGlobalPlanner
 
 namespace shared_voronoi_global_planner
 {
-    SharedVoronoiGlobalPlanner::SharedVoronoiGlobalPlanner() : nh("~")
+    SharedVoronoiGlobalPlanner::SharedVoronoiGlobalPlanner()
+        : nh("~" + std::string("shared_voronoi_global_planner"))
     {
     }
 
-    SharedVoronoiGlobalPlanner::SharedVoronoiGlobalPlanner(std::string name, costmap_2d::Costmap2DROS *costmap_ros) : nh("~")
+    SharedVoronoiGlobalPlanner::SharedVoronoiGlobalPlanner(std::string name, costmap_2d::Costmap2DROS *costmap_ros)
+        : nh("~" + std::string("shared_voronoi_global_planner"))
     {
     }
 
@@ -47,6 +49,20 @@ namespace shared_voronoi_global_planner
     {
         if (!initialized_)
         {
+            //Read parameters
+            nh.getParam("occupancy_threshold", occupancy_threshold);
+            nh.getParam("update_voronoi_rate", update_voronoi_rate);
+            nh.getParam("update_costmap_rate", update_costmap_rate);
+            nh.getParam("print_timings", print_timings);
+            nh.getParam("hash_resolution", hash_resolution);
+            nh.getParam("hash_length", hash_length);
+            nh.getParam("line_check_resolution", line_check_resolution);
+            nh.getParam("pixels_to_skip", pixels_to_skip);
+            nh.getParam("open_cv_scale", open_cv_scale);
+            nh.getParam("h_class_threshold", h_class_threshold);
+            nh.getParam("min_node_sep_sq", min_node_sep_sq);
+            nh.getParam("extra_point_distance", extra_point_distance);
+
             //Subscribe and advertise related topics
             local_costmap_sub = nh.subscribe("/move_base/local_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::localCostmapCB, this);
             global_costmap_sub = nh.subscribe("/move_base/global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);
@@ -57,11 +73,9 @@ namespace shared_voronoi_global_planner
             alternate_path_pub = nh.advertise<nav_msgs::Path>("alternate_plan", 1);
             // centroid_pub = nh.advertise<nav_msgs::Path>("/centroids", 1);
 
-
             //Create timer to update Voronoi diagram
             voronoi_update_timer = nh.createWallTimer(ros::WallDuration(1.0 / update_voronoi_rate), &SharedVoronoiGlobalPlanner::updateVoronoiCB, this);
-            map_update_timer = nh.createWallTimer(ros::WallDuration(1.0/update_costmap_rate), &SharedVoronoiGlobalPlanner::updateVoronoiMapCB, this);
-            // prev_costmap_time = std::chrono::system_clock::now();
+            map_update_timer = nh.createWallTimer(ros::WallDuration(1.0 / update_costmap_rate), &SharedVoronoiGlobalPlanner::updateVoronoiMapCB, this);
 
             ROS_INFO("Shared Voronoi Global Planner initialized");
         }
@@ -86,10 +100,10 @@ namespace shared_voronoi_global_planner
         //     new_pose.pose.position.x = centroids.x * map.resolution - map.origin.position.x;
         //     new_pose.pose.position.y = centroids.y * map.resolution - map.origin.position.y;
         //     new_pose.pose.position.z = 0;
-            
+
         //     if(isnan(new_pose.pose.position.x))
         //         new_pose.pose.position.x = -100;
-            
+
         //     if(isnan(new_pose.pose.position.y))
         //         new_pose.pose.position.y = -100;
 
@@ -210,7 +224,7 @@ namespace shared_voronoi_global_planner
                 {
                     int local_data = local_costmap.data[i];
 
-                    if (local_data > costmap_threshold)
+                    if (local_data > occupancy_threshold)
                     {
                         int global_curr_x = i % local_costmap.info.width + x_pixel_offset;
                         int global_curr_y = i / local_costmap.info.width + y_pixel_offset;

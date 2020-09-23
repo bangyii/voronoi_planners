@@ -307,7 +307,6 @@ namespace voronoi_path
 
     std::string voronoi_path::hash(const double &x, const double &y)
     {
-        double factor = 1.0 / hash_resolution;
         std::string ret;
 
         //!!!!!!! Inaccurate results if (float) cast is removed. !!!!!!
@@ -315,24 +314,15 @@ namespace voronoi_path
         //when converting nodes to hash key-pairs in edgesToGraph() method
 
         //Number of nodes with (float) cast is usually lesser than without. Indicating disconnected nodes even in close proximity
-        std::string x_string = std::to_string((int)((float)x * factor));
-        std::string y_string = std::to_string((int)((float)y * factor));
-        while (x_string.length() < hash_length)
+        std::string x_string = std::to_string((int)((float)x * hash_resolution));
+        std::string y_string = std::to_string((int)((float)y * hash_resolution));
+        while ((x_string.length() - (int)std::log10(hash_resolution)) < hash_length)
             x_string.insert(0, "0");
 
-        while (y_string.length() < hash_length)
+        while ((y_string.length() - (int)std::log10(hash_resolution)) < hash_length)
             y_string.insert(0, "0");
 
         ret = x_string + y_string;
-
-        return ret;
-    }
-
-    std::vector<double> voronoi_path::dehash(const std::string &str)
-    {
-        std::vector<double> ret(2);
-        ret[0] = std::stof(str.substr(0, hash_length)) / 10.0;
-        ret[1] = std::stof(str.substr(hash_length, hash_length)) / 10.0;
 
         return ret;
     }
@@ -357,12 +347,18 @@ namespace voronoi_path
             return path;
         }
 
+        std::cout << "Starting node: " << start_node << " , end node: " << end_node << std::endl;
+        // if (start_node == end_node)
+        // {
+        //     std::cout << "Same starting and ending nodes\n";
+        //     return std::vector<std::vector<GraphNode>>{std::vector<GraphNode>{start, end}};
+        // }
+
         std::vector<int> shortest_path;
         double cost;
         auto shortest_time = std::chrono::system_clock::now();
         if (findShortestPath(start_node, end_node, shortest_path, cost))
         {
-
             if (print_timings)
                 std::cout << "Time taken to find shortest path: " << ((std::chrono::system_clock::now() - shortest_time).count() / 1000000000.0) << "s\n";
 
@@ -645,7 +641,10 @@ namespace voronoi_path
 
         try
         {
-            if (num_paths == 0)
+            // if(shortestPath.size() <= 3)
+            //     std::cout << "Shortest path is less than 3 nodes long\n";
+
+            if (num_paths == 0 || shortestPath.size() <= 3)
             {
                 all_paths.push_back(shortestPath);
                 return true;
