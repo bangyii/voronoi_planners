@@ -7,6 +7,7 @@
 #include <costmap_2d/costmap_2d.h>
 #include <nav_core/base_global_planner.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/Twist.h>
 #include <angles/angles.h>
 #include <base_local_planner/world_model.h>
 #include <base_local_planner/costmap_model.h>
@@ -100,15 +101,21 @@ namespace shared_voronoi_global_planner
          **/
         double extra_point_distance = 1.0;
 
+        double forward_sim_time = 1.0; //s
+        double forward_sim_resolution = 0.1; //m
+
         ros::NodeHandle nh;
         ros::Subscriber local_costmap_sub;
         ros::Subscriber global_costmap_sub;
         ros::Subscriber global_update_sub;
+        ros::Subscriber user_vel_sub;
         ros::Publisher merged_costmap_pub;
         ros::Publisher global_path_pub;
         ros::Publisher alternate_path_pub;
         ros::WallTimer voronoi_update_timer;
         ros::WallTimer map_update_timer;
+
+        geometry_msgs::Twist cmd_vel;
 
         ros::Publisher centroid_pub;
 
@@ -117,7 +124,9 @@ namespace shared_voronoi_global_planner
         void globalCostmapUpdateCB(const map_msgs::OccupancyGridUpdate::ConstPtr &msg);
         void updateVoronoiCB(const ros::WallTimerEvent &e);
         void updateVoronoiMapCB(const ros::WallTimerEvent &e);
+        void cmdVelCB(const geometry_msgs::Twist::ConstPtr &msg);
         void threadedMapCleanup();
+        int getMatchedPath(const geometry_msgs::PoseStamped &curr_pose, const std::vector<std::vector<geometry_msgs::PoseStamped>> &plans_);
     };
 }; // namespace shared_voronoi_global_planner
 

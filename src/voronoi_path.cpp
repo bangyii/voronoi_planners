@@ -37,7 +37,8 @@ namespace voronoi_path
             cv::flip(cv_map, cv_map, 1);
             cv::transpose(cv_map, cv_map);
             cv::flip(cv_map, cv_map, 1);
-            std::cout << "Time to copy map data " << (std::chrono::system_clock::now() - copy_time).count() / 1000000000.0 << std::endl;
+            if(print_timings)
+                std::cout << "Time to copy map data " << (std::chrono::system_clock::now() - copy_time).count() / 1000000000.0 << std::endl;
 
             auto start_time = std::chrono::system_clock::now();
 
@@ -83,7 +84,8 @@ namespace voronoi_path
             // cv::waitKey(0);
             //TODO: Upsize back contour centers
 
-            std::cout << "Time to find contour " << (std::chrono::system_clock::now() - start_time).count() / 1000000000.0 << std::endl;
+            if(print_timings)
+                std::cout << "Time to find contour " << (std::chrono::system_clock::now() - start_time).count() / 1000000000.0 << std::endl;
         }
 
         return centers;
@@ -198,7 +200,7 @@ namespace voronoi_path
             points[i] = points_vec[i];
         }
         if (print_timings)
-            std::cout << "Loop map points took " << (std::chrono::system_clock::now() - loop_map_points).count() / 1000000000.0 << "s\n";
+            std::cout << "Loop map points: \t" << (std::chrono::system_clock::now() - loop_map_points).count() / 1000000000.0 << "s\n";
 
         //Set the minimum and maximum bounds for voronoi diagram. Follows size of map
         jcv_rect rect;
@@ -225,7 +227,7 @@ namespace voronoi_path
         jcv_diagram_free(&diagram);
         free(points);
         if (print_timings)
-            std::cout << "Generating edges took " << (std::chrono::system_clock::now() - diagram_time).count() / 1000000000.0 << "s\n";
+            std::cout << "Generating edges: \t " << (std::chrono::system_clock::now() - diagram_time).count() / 1000000000.0 << "s\n";
 
         auto clearing_time = std::chrono::system_clock::now();
 
@@ -235,7 +237,7 @@ namespace voronoi_path
         //Remove edges that pass through obstacle
         removeCollisionEdges();
         if (print_timings)
-            std::cout << "Clearing edges took " << (std::chrono::system_clock::now() - clearing_time).count() / 1000000000.0 << "s\n";
+            std::cout << "Clearing edges: \t" << (std::chrono::system_clock::now() - clearing_time).count() / 1000000000.0 << "s\n";
 
         auto adj_list_time = std::chrono::system_clock::now();
         //Convert edges to adjacency list
@@ -273,8 +275,8 @@ namespace voronoi_path
 
         if (print_timings)
         {
-            std::cout << "Adjacency list took " << (std::chrono::system_clock::now() - adj_list_time).count() / 1000000000.0 << "s\n";
-            std::cout << "Time taken to convert to edges: " << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << " seconds" << std::endl;
+            std::cout << "Adjacency list: \t " << (std::chrono::system_clock::now() - adj_list_time).count() / 1000000000.0 << "s\n";
+            std::cout << "Convert to edges: \t" << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << "s\n";
         }
 
         //Get centroids after map has been updated
@@ -347,20 +349,13 @@ namespace voronoi_path
             return path;
         }
 
-        std::cout << "Starting node: " << start_node << " , end node: " << end_node << std::endl;
-        // if (start_node == end_node)
-        // {
-        //     std::cout << "Same starting and ending nodes\n";
-        //     return std::vector<std::vector<GraphNode>>{std::vector<GraphNode>{start, end}};
-        // }
-
         std::vector<int> shortest_path;
         double cost;
         auto shortest_time = std::chrono::system_clock::now();
         if (findShortestPath(start_node, end_node, shortest_path, cost))
         {
             if (print_timings)
-                std::cout << "Time taken to find shortest path: " << ((std::chrono::system_clock::now() - shortest_time).count() / 1000000000.0) << "s\n";
+                std::cout << "Find shortest path: \t" << ((std::chrono::system_clock::now() - shortest_time).count() / 1000000000.0) << "s\n";
 
             std::vector<std::vector<int>> all_paths;
             auto kth_time = std::chrono::system_clock::now();
@@ -380,7 +375,7 @@ namespace voronoi_path
             }
 
             if (print_timings)
-                std::cout << "Time taken to find alternate paths: " << ((std::chrono::system_clock::now() - kth_time).count() / 1000000000.0) << "s\n";
+                std::cout << "Find alternate paths: \t" << ((std::chrono::system_clock::now() - kth_time).count() / 1000000000.0) << "s\n";
 
             //Copy all_paths into new container which include start and end
             std::vector<std::vector<GraphNode>> all_path_nodes;
@@ -472,7 +467,7 @@ namespace voronoi_path
             // path = all_path_nodes;
 
             if (print_timings)
-                std::cout << "Time taken to find all paths, including time to find nearest node: " << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << "s\n";
+                std::cout << "Find all paths, including time to find nearest node: \t" << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << "s\n";
         }
 
         else
@@ -563,7 +558,7 @@ namespace voronoi_path
         }
 
         if (print_timings)
-            std::cout << "Time taken to find nearest node: " << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << "s\n";
+            std::cout << "Find nearest node: \t" << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << "s\n";
         return true;
     }
 
@@ -586,24 +581,33 @@ namespace voronoi_path
         for (auto node : path_)
             path.emplace_back(node_inf[node].x, node_inf[node].y);
 
+        //Calculate all coefficients
+        std::vector<std::complex<double>> al_denom_prod(centers.size(), std::complex<double>(1, 1));
+        for (int j = 0; j < centers.size(); ++j)
+        {
+            auto obs = centers[j];
+            if (j == 0)
+            {
+                for (int k = 1; k < centers.size(); ++k)
+                    al_denom_prod[j] *= (obs - centers[k]);
+            }
+
+            //Otherwise, multiply centers[j-1] and divide centers[j]
+            else
+                al_denom_prod[j] = al_denom_prod[j-1] * centers[j - 1] / centers[j];
+        }
+
         std::complex<double> path_sum(0, 0);
+
         //Go through each edge of the path
         for (int i = 1; i < path.size(); ++i)
         {
             std::complex<double> edge_sum(0, 0);
-            //Each edge must iterate through all obstacles
-            for (auto obs : centers)
-            {
-                //Calculate Al value, initialize with 1,1
-                std::complex<double> al_denom_prod(1, 1);
-                for (auto excl_obs : centers)
-                {
-                    if (excl_obs == obs)
-                        continue;
 
-                    al_denom_prod *= (obs - excl_obs);
-                }
-                std::complex<double> al = fNaught(obs, centers.size()) / al_denom_prod;
+            //Each edge must iterate through all obstacles
+            for (int j = 0; j < centers.size(); ++j)
+            {
+                auto obs = centers[j];
 
                 double real_part = std::log(std::abs(path[i] - obs)) - std::log(std::abs(path[i - 1] - obs));
                 double im_part = std::arg(path[i] - obs) - std::arg(path[i - 1] - obs);
@@ -615,6 +619,7 @@ namespace voronoi_path
                 while (im_part < -M_PI)
                     im_part += 2 * M_PI;
 
+                std::complex<double> al = fNaught(obs, centers.size()) / al_denom_prod[j];
                 edge_sum += (std::complex<double>(real_part, im_part) * al);
             }
             //Add this edge's sum to the path sum
@@ -636,14 +641,12 @@ namespace voronoi_path
         double spur_path_cum_time = 0;
         double copy_kth_cum_time = 0;
         double get_total_cost_time = 0;
+        double calc_homotopy_cum_time = 0;
 
         all_paths.reserve(num_paths + 1);
 
         try
         {
-            // if(shortestPath.size() <= 3)
-            //     std::cout << "Shortest path is less than 3 nodes long\n";
-
             if (num_paths == 0 || shortestPath.size() <= 3)
             {
                 all_paths.push_back(shortestPath);
@@ -673,8 +676,11 @@ namespace voronoi_path
                 last_root_ind = 0;
 
                 //Spur node is ith node
-                for (int i = 0; i < kthPaths[k - 1].size() - 2; ++i)
+                //Spur node is from start to 2nd last node of path, inclusive
+                for (int i = 0; i < kthPaths[k - 1].size() - 1; ++i)
                 {
+                    int spurNode = kthPaths[k - 1][i];
+
                     //Restore/copy adjacency list
                     auto restore_start = std::chrono::system_clock::now();
                     for (int z = 0; z < adj_list_removed_edges.size(); ++z)
@@ -686,14 +692,12 @@ namespace voronoi_path
                     adj_list_removed_edges.shrink_to_fit();
                     adjacency_cum_time += (std::chrono::system_clock::now() - restore_start).count() / 1000000000.0;
 
-                    //Spur node is from start to 2nd last node of path, inclusive
-                    int spurNode = kthPaths[k - 1][i];
-                    std::vector<int> rootPath(i);
+                    std::vector<int> rootPath(i + 1);
 
                     //Copy root path into container. Root path is path before spur node, containing the path from start onwards
                     //Root path size might be 0 if spurNode is the starting node
                     auto copy_root_time = std::chrono::system_clock::now();
-                    std::copy(kthPaths[k - 1].begin(), kthPaths[k - 1].begin() + i, rootPath.begin());
+                    std::copy(kthPaths[k - 1].begin(), kthPaths[k - 1].begin() + i + 1, rootPath.begin());
                     copy_root_cum_time += (std::chrono::system_clock::now() - copy_root_time).count() / 1000000000.0;
 
                     //Disconnect edges if root path has already been discovered before
@@ -845,7 +849,6 @@ namespace voronoi_path
                     }
                 }
 
-                auto copy_kth = std::chrono::system_clock::now();
                 //Find minimum cost path
                 double min_cost = std::numeric_limits<double>::infinity();
                 int copy_index = 0;
@@ -853,7 +856,7 @@ namespace voronoi_path
                 {
                     if (cost_vec[min_ind] < min_cost)
                     {
-
+                        auto calc_homo_start = std::chrono::system_clock::now();
                         //Calculate homotopy class for all previously generated paths
                         std::vector<std::complex<double>> homotopy_classes;
                         for (auto homotopy_paths : kthPaths)
@@ -863,6 +866,7 @@ namespace voronoi_path
 
                         //Get the current potential path's homotopy class
                         std::complex<double> curr_h_class = calcHomotopyClass(potentialKth[min_ind]);
+                        calc_homotopy_cum_time += (std::chrono::system_clock::now() - calc_homo_start).count() / 1000000000.0;
 
                         //Check that the path is in unique homotopy class compared to previous kthPaths
                         //Iterate through all path's homotopy class
@@ -879,6 +883,7 @@ namespace voronoi_path
                     }
                 }
 
+                auto copy_kth = std::chrono::system_clock::now();
                 //Copy lowest cost path into kthPaths, if not already inside
                 bool path_unique = true;
                 for (auto paths : kthPaths)
@@ -933,13 +938,14 @@ namespace voronoi_path
 
         if (print_timings)
         {
-            std::cout << "Cumulative adjacency list restore time " << adjacency_cum_time << std::endl;
-            std::cout << "Cumulative copy root path time " << copy_root_cum_time << std::endl;
-            std::cout << "Cumulative disconnect edges time " << disconnect_edge_cum_time << std::endl;
-            std::cout << "Cumulative remove nodes of root path time " << remove_nodes_cum_time << std::endl;
-            std::cout << "Cumulative find spur path time " << spur_path_cum_time << std::endl;
-            std::cout << "Cumulative copy kth path time " << copy_kth_cum_time << std::endl;
-            std::cout << "Cumulative get total cost time " << get_total_cost_time << std::endl;
+            std::cout << "Cum adjacency list restore: " << adjacency_cum_time << std::endl;
+            std::cout << "Cum copy root path: " << copy_root_cum_time << std::endl;
+            std::cout << "Cum disconnect edges: " << disconnect_edge_cum_time << std::endl;
+            std::cout << "Cum remove nodes of root path: " << remove_nodes_cum_time << std::endl;
+            std::cout << "Cum find spur path: " << spur_path_cum_time << std::endl;
+            std::cout << "Cum copy kth path: " << copy_kth_cum_time << std::endl;
+            std::cout << "Cum get total cost: " << get_total_cost_time << std::endl;
+            std::cout << "Cum calc homotopy: " << calc_homotopy_cum_time << std::endl;
         }
 
         if (num_paths == all_paths.size() - 1)
