@@ -253,10 +253,11 @@ namespace voronoi_path
         double open_cv_scale = 0.25;
 
         /**
-         * Threshold to classify a homotopy class as same or different. Ideally, same homotopy classes should have identical 
-         * compelx values, but since "double" representation is used, some difference might be present for same homotopy classes
+         * Percentage threshold to classify a homotopy class as same or different. Ideally, same homotopy classes should have identical 
+         * complex values, but since "double" representation is used, some difference might be present for same homotopy classes
+         * 0.01 means 1 percent difference in class values
          **/
-        double h_class_threshold = 0.2;
+        double h_class_threshold = 0.01;
 
         /**
          * Minimum separation between nodes. If nodes are less than this value (m) apart, they will be cleaned up

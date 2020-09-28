@@ -101,8 +101,10 @@ namespace shared_voronoi_global_planner
          **/
         double extra_point_distance = 1.0;
 
-        double forward_sim_time = 1.0; //s
+        double forward_sim_time = 1.0;       //s
         double forward_sim_resolution = 0.1; //m
+        bool add_local_costmap_corners = true;
+        std::vector<std::pair<int, int>> map_pixels_backup;
 
         ros::NodeHandle nh;
         ros::Subscriber local_costmap_sub;
@@ -114,7 +116,6 @@ namespace shared_voronoi_global_planner
         ros::Publisher alternate_path_pub;
         ros::WallTimer voronoi_update_timer;
         ros::WallTimer map_update_timer;
-
         geometry_msgs::Twist cmd_vel;
 
         ros::Publisher centroid_pub;

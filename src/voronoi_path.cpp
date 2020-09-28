@@ -37,7 +37,7 @@ namespace voronoi_path
             cv::flip(cv_map, cv_map, 1);
             cv::transpose(cv_map, cv_map);
             cv::flip(cv_map, cv_map, 1);
-            if(print_timings)
+            if (print_timings)
                 std::cout << "Time to copy map data " << (std::chrono::system_clock::now() - copy_time).count() / 1000000000.0 << std::endl;
 
             auto start_time = std::chrono::system_clock::now();
@@ -54,8 +54,11 @@ namespace voronoi_path
             {
                 mu[i] = moments(contours[i], false);
 
-                //Centroids in terms of pixels on the original image
-                centers[i] = std::complex<double>(-mu[i].m01 / mu[i].m00 / open_cv_scale, -mu[i].m10 / mu[i].m00 / open_cv_scale);
+                //Centroids in terms of pixels on the original image, origin is top left, x is rightwards y is downwards
+                // centers[i] = std::complex<double>(mu[i].m10 / mu[i].m00 / open_cv_scale, mu[i].m01 / mu[i].m00 / open_cv_scale);
+
+                //Centroids in terms of map image origin (bottom right), x is upwards, y is leftwards
+                centers[i] = std::complex<double>(map.width - mu[i].m01 / mu[i].m00 / open_cv_scale, map.height - mu[i].m10 / mu[i].m00 / open_cv_scale);
             }
 
             //Delete NaN centroids
@@ -84,7 +87,7 @@ namespace voronoi_path
             // cv::waitKey(0);
             //TODO: Upsize back contour centers
 
-            if(print_timings)
+            if (print_timings)
                 std::cout << "Time to find contour " << (std::chrono::system_clock::now() - start_time).count() / 1000000000.0 << std::endl;
         }
 
@@ -103,7 +106,7 @@ namespace voronoi_path
             {
                 jcv_point temp_point;
                 temp_point.x = i % map.width;
-                temp_point.y = (int)(i / map.width);
+                temp_point.y = static_cast<int>(i / map.width);
 
                 //TODO: use move? Old point no longer required. Emplace back makes no difference
                 points_vec.push_back(temp_point);
@@ -119,13 +122,6 @@ namespace voronoi_path
         updating_voronoi = true;
         //Reset all variables
         map = map_;
-        edge_vector.clear();
-        adj_list.clear();
-        node_inf.clear();
-
-        //Set bottom left and top right for use during homotopy check
-        BL = std::complex<double>(0, 0);
-        TR = std::complex<double>(map.width - 1, map.height - 1);
 
         int size = map.data.size();
         if (size == 0 || is_planning)
@@ -133,6 +129,14 @@ namespace voronoi_path
             updating_voronoi = false;
             return false;
         }
+
+        //Set bottom left and top right for use during homotopy check
+        BL = std::complex<double>(0, 0);
+        TR = std::complex<double>(map.width - 1, map.height - 1);
+
+        edge_vector.clear();
+        adj_list.clear();
+        node_inf.clear();
 
         auto loop_map_points = std::chrono::system_clock::now();
         // Loop through map to find occupied cells
@@ -185,7 +189,9 @@ namespace voronoi_path
         }
 
         int occupied_points = points_vec.size();
-        std::cout << "Number of occupied points: " << occupied_points << std::endl;
+
+        if (print_timings)
+            std::cout << "Number of occupied points: " << occupied_points << std::endl;
         jcv_point *points = (jcv_point *)malloc(occupied_points * sizeof(jcv_point));
 
         if (!points)
@@ -271,7 +277,9 @@ namespace voronoi_path
             adj_list[node_index[0]].push_back(node_index[1]);
             adj_list[node_index[1]].push_back(node_index[0]);
         }
-        std::cout << "Number of nodes: " << adj_list.size() << std::endl;
+
+        if (print_timings)
+            std::cout << "Number of nodes: " << adj_list.size() << std::endl;
 
         if (print_timings)
         {
@@ -316,12 +324,12 @@ namespace voronoi_path
         //when converting nodes to hash key-pairs in edgesToGraph() method
 
         //Number of nodes with (float) cast is usually lesser than without. Indicating disconnected nodes even in close proximity
-        std::string x_string = std::to_string((int)((float)x * hash_resolution));
-        std::string y_string = std::to_string((int)((float)y * hash_resolution));
-        while ((x_string.length() - (int)std::log10(hash_resolution)) < hash_length)
+        std::string x_string = std::to_string(static_cast<int>(static_cast<float>(x) * hash_resolution));
+        std::string y_string = std::to_string(static_cast<int>(static_cast<float>(y) * hash_resolution));
+        while ((x_string.length() - static_cast<int>(std::log10(hash_resolution))) < hash_length)
             x_string.insert(0, "0");
 
-        while ((y_string.length() - (int)std::log10(hash_resolution)) < hash_length)
+        while ((y_string.length() - static_cast<int>(std::log10(hash_resolution))) < hash_length)
             y_string.insert(0, "0");
 
         ret = x_string + y_string;
@@ -362,7 +370,8 @@ namespace voronoi_path
             //Get next shortest path
             if (num_paths >= 1)
             {
-                std::cout << "Finding alternate paths\n";
+                if(print_timings)
+                    std::cout << "Finding alternate paths\n";
                 try
                 {
                     kthShortestPaths(start_node, end_node, shortest_path, all_paths, num_paths - 1);
@@ -577,7 +586,7 @@ namespace voronoi_path
         std::vector<std::complex<double>> path;
         path.reserve(path_.size());
 
-        //Convert path to complex path, emplace back causes crashing
+        //Convert path to complex path
         for (auto node : path_)
             path.emplace_back(node_inf[node].x, node_inf[node].y);
 
@@ -594,11 +603,10 @@ namespace voronoi_path
 
             //Otherwise, multiply centers[j-1] and divide centers[j]
             else
-                al_denom_prod[j] = al_denom_prod[j-1] * centers[j - 1] / centers[j];
+                al_denom_prod[j] = al_denom_prod[j - 1] * centers[j - 1] / centers[j];
         }
 
         std::complex<double> path_sum(0, 0);
-
         //Go through each edge of the path
         for (int i = 1; i < path.size(); ++i)
         {
@@ -647,7 +655,7 @@ namespace voronoi_path
 
         try
         {
-            if (num_paths == 0 || shortestPath.size() <= 3)
+            if (num_paths == 0)
             {
                 all_paths.push_back(shortestPath);
                 return true;
@@ -836,7 +844,7 @@ namespace voronoi_path
                         if (path_is_unique)
                         {
                             //Get cost of total path
-                            double total_cost;
+                            double total_cost = 0;
                             for (int int_node = 0; int_node < total_path.size() - 1; ++int_node)
                             {
                                 total_cost += euclideanDist(node_inf[int_node], node_inf[int_node + 1]);
@@ -847,22 +855,34 @@ namespace voronoi_path
                         }
                         get_total_cost_time += (std::chrono::system_clock::now() - get_total_start).count() / 1000000000.0;
                     }
+
+                    //Reset entire adj_list when spur node changes
+                    for (int i = 0; i < adj_list_modified_ind.size(); ++i)
+                    {
+                        adj_list[adj_list_modified_ind[i]] = adj_list_backup[adj_list_modified_ind[i]];
+                    }
+                    adj_list_modified_ind.clear();
+                    adj_list_modified_ind.shrink_to_fit();
                 }
+
+                //No alternate paths found
+                if (potentialKth.size() == 0)
+                    break;
 
                 //Find minimum cost path
                 double min_cost = std::numeric_limits<double>::infinity();
                 int copy_index = 0;
+
+                //Calculate homotopy class for all previously generated paths
+                std::vector<std::complex<double>> homotopy_classes;
+                for (auto homotopy_paths : kthPaths)
+                    homotopy_classes.emplace_back(calcHomotopyClass(homotopy_paths));
+
                 for (int min_ind = 0; min_ind < cost_vec.size(); ++min_ind)
                 {
                     if (cost_vec[min_ind] < min_cost)
                     {
                         auto calc_homo_start = std::chrono::system_clock::now();
-                        //Calculate homotopy class for all previously generated paths
-                        std::vector<std::complex<double>> homotopy_classes;
-                        for (auto homotopy_paths : kthPaths)
-                        {
-                            homotopy_classes.emplace_back(calcHomotopyClass(homotopy_paths));
-                        }
 
                         //Get the current potential path's homotopy class
                         std::complex<double> curr_h_class = calcHomotopyClass(potentialKth[min_ind]);
@@ -872,10 +892,10 @@ namespace voronoi_path
                         //Iterate through all path's homotopy class
                         for (auto h_class : homotopy_classes)
                         {
-                            //This homotopy class path does not exist yet, assign min_cost and copy_index
-                            if (std::abs(curr_h_class - h_class) > h_class_threshold)
+                            //This homotopy class path does not exist yet, assign min_cost and copy_index)
+                            //Greater than 1% difference
+                            if(std::abs(curr_h_class - h_class)/std::abs(curr_h_class) > 0.01)
                             {
-
                                 min_cost = cost_vec[min_ind];
                                 copy_index = min_ind;
                             }
@@ -884,46 +904,9 @@ namespace voronoi_path
                 }
 
                 auto copy_kth = std::chrono::system_clock::now();
-                //Copy lowest cost path into kthPaths, if not already inside
-                bool path_unique = true;
-                for (auto paths : kthPaths)
-                {
-                    int equal_count = 0;
-                    for (int path_nodes = 0; path_nodes < paths.size(); ++path_nodes)
-                    {
-                        try
-                        {
-                            if (paths[path_nodes] == potentialKth[copy_index][path_nodes])
-                                equal_count++;
-                        }
-
-                        catch (const std::exception &e)
-                        {
-                            break;
-                        }
-                    }
-
-                    if (equal_count == potentialKth[copy_index].size())
-                    {
-                        path_unique = false;
-                        break;
-                    }
-                }
-
-                if (path_unique)
-                    kthPaths.push_back(potentialKth[copy_index]);
+                
+                kthPaths.push_back(potentialKth[copy_index]);
                 copy_kth_cum_time += (std::chrono::system_clock::now() - copy_kth).count() / 1000000000.0;
-
-                //Reset entire adj_list when k path changes
-                for (int i = 0; i < adj_list_modified_ind.size(); ++i)
-                {
-                    adj_list[adj_list_modified_ind[i]] = adj_list_backup[adj_list_modified_ind[i]];
-                }
-                adj_list_modified_ind.clear();
-                adj_list_modified_ind.shrink_to_fit();
-
-                if (potentialKth.size() == 0)
-                    break;
             }
             all_paths.insert(all_paths.begin(), kthPaths.begin(), kthPaths.end());
         }
@@ -1069,7 +1052,6 @@ namespace voronoi_path
                     }
                 }
             }
-
             else
                 break;
         }

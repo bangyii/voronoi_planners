@@ -31,7 +31,6 @@ namespace shared_voronoi_global_planner
 
         voronoi_path.print_timings = print_timings;
         voronoi_path.mapToGraph(map);
-        merged_costmap_pub.publish(merged_costmap);
     }
 
     void SharedVoronoiGlobalPlanner::updateVoronoiMapCB(const ros::WallTimerEvent &e)
@@ -42,6 +41,31 @@ namespace shared_voronoi_global_planner
         map.resolution = merged_costmap.info.resolution;
         map.origin.position.x = merged_costmap.info.origin.position.x;
         map.origin.position.y = merged_costmap.info.origin.position.y;
+
+        // unsigned char *costmap_char = costmap->getCostmap()->getCharMap();
+        // int pixels = costmap->getCostmap()->getSizeInCellsX() * costmap->getCostmap()->getSizeInCellsY();
+        // merged_costmap.header.frame_id = costmap->getGlobalFrameID();
+        // merged_costmap.header.stamp = ros::Time::now();
+        // merged_costmap.info.origin.position.x = costmap->getCostmap()->getOriginX();
+        // merged_costmap.info.origin.position.y = costmap->getCostmap()->getOriginY();
+        // merged_costmap.info.origin.orientation.w = 1.0;
+        // merged_costmap.info.resolution = costmap->getCostmap()->getResolution();
+        // merged_costmap.info.width = costmap->getCostmap()->getSizeInCellsX();
+        // merged_costmap.info.height = costmap->getCostmap()->getSizeInCellsY();
+
+        // merged_costmap.data.clear();
+        // for (int i = 0; i < pixels; ++i)
+        // {
+        //     // if(costmap_char[i] != -1 && costmap_char[i] != 255)
+        //     // std::cout << static_cast<int>(costmap_char[i]) << "\n";
+
+        //     if (static_cast<int>(costmap_char[i]) < 0)
+        //         std::cout << "Negative map value!\n";
+
+        //     merged_costmap.data.push_back(static_cast<int>(costmap_char[i]));
+        // }
+        // // std::cout << "Merged costmap size " << merged_costmap.data.size() << "\n";
+        // merged_costmap_pub.publish(merged_costmap);
 
         map.data.clear();
         map.data.insert(map.data.begin(), merged_costmap.data.begin(), merged_costmap.data.end());
@@ -65,11 +89,12 @@ namespace shared_voronoi_global_planner
             nh.getParam("h_class_threshold", h_class_threshold);
             nh.getParam("min_node_sep_sq", min_node_sep_sq);
             nh.getParam("extra_point_distance", extra_point_distance);
+            nh.getParam("add_local_costmap_corners", add_local_costmap_corners);
 
             //Subscribe and advertise related topics
-            local_costmap_sub = nh.subscribe("/move_base/local_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::localCostmapCB, this);
             global_costmap_sub = nh.subscribe("/move_base/global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);
             global_update_sub = nh.subscribe("/move_base/global_costmap/costmap_updates", 1, &SharedVoronoiGlobalPlanner::globalCostmapUpdateCB, this);
+            local_costmap_sub = nh.subscribe("/move_base/local_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::localCostmapCB, this);
             user_vel_sub = nh.subscribe("/test_vel", 1, &SharedVoronoiGlobalPlanner::cmdVelCB, this);
 
             merged_costmap_pub = nh.advertise<nav_msgs::OccupancyGrid>("merged_costmap", 1);
@@ -128,19 +153,17 @@ namespace shared_voronoi_global_planner
             if (!voronoi_path.isUpdatingVoronoi())
                 break;
 
-            ROS_INFO("Voronoi diagram is updating, waiting for it to complete");
+            ROS_DEBUG("Voronoi diagram is updating, waiting for it to complete before requesting for plan");
             r.sleep();
         }
 
         //Get voronoi paths
         std::vector<std::vector<voronoi_path::GraphNode>> all_paths = voronoi_path.getPath(start_point, end_point, num_paths);
-
         std::vector<geometry_msgs::PoseStamped> alt_plan;
 
         //If paths are found
         if (!all_paths.empty())
         {
-            ROS_INFO("Voronoi path(s) received");
             std_msgs::Header header;
             header.stamp = ros::Time::now();
             header.frame_id = merged_costmap.header.frame_id;
@@ -198,7 +221,7 @@ namespace shared_voronoi_global_planner
                 std::cout << preferred_path << std::endl;
             }
 
-            if(preferred_path != 0)
+            if (preferred_path != 0)
             {
                 std::swap(plan, alt_plan);
             }
@@ -299,45 +322,50 @@ namespace shared_voronoi_global_planner
         local_costmap = *msg;
 
         //Merge costmaps if global map is not empty
-        //TODO: Can be threaded to increase speed
-        if (!map.data.empty())
+        if (!local_costmap.data.empty())
         {
-            if (!local_costmap.data.empty())
-            {
-                //Get origin of local_costmap wrt to origin of global_costmap
-                double rel_local_x = -merged_costmap.info.origin.position.x + local_costmap.info.origin.position.x;
-                double rel_local_y = -merged_costmap.info.origin.position.y + local_costmap.info.origin.position.y;
+            //Get origin of local_costmap wrt to origin of global_costmap
+            double rel_local_x = -merged_costmap.info.origin.position.x + local_costmap.info.origin.position.x;
+            double rel_local_y = -merged_costmap.info.origin.position.y + local_costmap.info.origin.position.y;
 
-                //Costmap is rotated ccw 90deg in rviz
-                //Convert distance to pixels in global costmap resolution
-                int x_pixel_offset = rel_local_x / merged_costmap.info.resolution;
-                int y_pixel_offset = rel_local_y / merged_costmap.info.resolution;
+            //Costmap is rotated ccw 90deg in rviz
+            //Convert distance to pixels in global costmap resolution
+            int x_pixel_offset = rel_local_x / merged_costmap.info.resolution;
+            int y_pixel_offset = rel_local_y / merged_costmap.info.resolution;
 
-                std::vector<voronoi_path::GraphNode> local_vertices;
-                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset, y_pixel_offset));
-                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset));
-                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset + local_costmap.info.height));
-                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset, y_pixel_offset + local_costmap.info.height));
+            std::vector<voronoi_path::GraphNode> local_vertices;
+            local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset, y_pixel_offset));
+            local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset));
+            local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset + local_costmap.info.height));
+            local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset, y_pixel_offset + local_costmap.info.height));
+
+            if (add_local_costmap_corners)
                 voronoi_path.setLocalVertices(local_vertices);
 
-                for (int i = 0; i < local_costmap.data.size(); i++)
-                {
-                    int local_data = local_costmap.data[i];
+            //Restore modified global costmap pixels to old value in previous loop
+            for (int i = 0; i < map_pixels_backup.size(); ++i)
+            {
+                merged_costmap.data[map_pixels_backup[i].first] = map_pixels_backup[i].second;
+            }
+            map_pixels_backup.clear();
 
-                    if (local_data > occupancy_threshold)
-                    {
-                        int global_curr_x = i % local_costmap.info.width + x_pixel_offset;
-                        int global_curr_y = i / local_costmap.info.width + y_pixel_offset;
-                        map.data[global_curr_y * merged_costmap.info.width + global_curr_x] = local_data;
-                    }
+            for (int i = 0; i < local_costmap.data.size(); ++i)
+            {
+                int local_data = local_costmap.data[i];
+
+                if (local_data >= occupancy_threshold)
+                {
+                    int global_curr_x = i % local_costmap.info.width + x_pixel_offset;
+                    int global_curr_y = i / local_costmap.info.width + y_pixel_offset;
+                    // map.data[global_curr_y * merged_costmap.info.width + global_curr_x] = local_data;
+                    map_pixels_backup.emplace_back(global_curr_y * merged_costmap.info.width + global_curr_x,
+                                                   merged_costmap.data[global_curr_y * merged_costmap.info.width + global_curr_x]);
+                    merged_costmap.data[global_curr_y * merged_costmap.info.width + global_curr_x] = local_data;
                 }
             }
-
-            // merged_costmap.data.clear();
-            // merged_costmap.data.insert(merged_costmap.data.begin(), map.data.begin(), map.data.end());
-
-            // merged_costmap_pub.publish(merged_costmap);
         }
+        // local_costmap_updated = true;
+        merged_costmap_pub.publish(merged_costmap);
     }
 
     void SharedVoronoiGlobalPlanner::globalCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg)
@@ -348,6 +376,16 @@ namespace shared_voronoi_global_planner
     void SharedVoronoiGlobalPlanner::globalCostmapUpdateCB(const map_msgs::OccupancyGridUpdate::ConstPtr &msg)
     {
         merged_costmap.data = msg->data;
+            
+        //Copy back local costmap pixels to prevent oscillation of existence in local obstacles
+        if(!merged_costmap.data.empty())
+        {
+            if(!local_costmap.data.empty())
+            {
+                const auto costmap_ptr = boost::make_shared<nav_msgs::OccupancyGrid>(local_costmap);
+                localCostmapCB(costmap_ptr);
+            }
+        }
     }
 
     void SharedVoronoiGlobalPlanner::cmdVelCB(const geometry_msgs::Twist::ConstPtr &msg)
@@ -402,7 +440,5 @@ namespace shared_voronoi_global_planner
 
             map.data.insert(map.data.end(), make_move_iterator(temp_vec.begin()), make_move_iterator(temp_vec.end()));
         }
-
-        // std::cout << "Time taken to cleanup map " << (std::chrono::system_clock::now() - map_cleanup_time).count() / 1000000000.0 << std::endl;
     }
 } // namespace shared_voronoi_global_planner
