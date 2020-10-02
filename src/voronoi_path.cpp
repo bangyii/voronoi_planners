@@ -94,7 +94,6 @@ namespace voronoi_path
         return centers;
     }
 
-    //TODO: Pass by ref?
     std::vector<jcv_point> voronoi_path::fillOccupancyVector(const int &start_index, const int &num_pixels)
     {
         //TODO: Reserve num_pixels for points_vec? Could end up using more memory
@@ -140,15 +139,13 @@ namespace voronoi_path
 
         auto loop_map_points = std::chrono::system_clock::now();
         // Loop through map to find occupied cells
-        //TODO: Reserve?
         std::vector<jcv_point> points_vec;
 
         int num_threads = std::thread::hardware_concurrency();
 
-        //TODO: Reserve
         std::vector<std::future<std::vector<jcv_point>>> future_vector;
+        future_vector.reserve(num_threads - 1);
 
-        //TODO: Create vector for storing jcv_point vectors from thread
         int num_pixels = floor(size / num_threads);
         int start_pixel = 0;
 
@@ -160,7 +157,6 @@ namespace voronoi_path
 
         //For last thread, take all remaining pixels
         //This current thread is the nth thread
-        //TODO: Pass ref?
         points_vec = fillOccupancyVector((num_threads - 1) * num_pixels, size - num_pixels * (num_threads - 1));
 
         for (int i = 0; i < future_vector.size(); ++i)
@@ -192,6 +188,7 @@ namespace voronoi_path
 
         if (print_timings)
             std::cout << "Number of occupied points: " << occupied_points << std::endl;
+
         jcv_point *points = (jcv_point *)malloc(occupied_points * sizeof(jcv_point));
 
         if (!points)
@@ -246,6 +243,7 @@ namespace voronoi_path
             std::cout << "Clearing edges: \t" << (std::chrono::system_clock::now() - clearing_time).count() / 1000000000.0 << "s\n";
 
         auto adj_list_time = std::chrono::system_clock::now();
+
         //Convert edges to adjacency list
         std::map<std::string, int> hash_index_map;
         for (int i = 0; i < edge_vector.size(); ++i)
@@ -279,10 +277,8 @@ namespace voronoi_path
         }
 
         if (print_timings)
-            std::cout << "Number of nodes: " << adj_list.size() << std::endl;
-
-        if (print_timings)
         {
+            std::cout << "Number of nodes: " << adj_list.size() << std::endl;
             std::cout << "Adjacency list: \t " << (std::chrono::system_clock::now() - adj_list_time).count() / 1000000000.0 << "s\n";
             std::cout << "Convert to edges: \t" << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << "s\n";
         }
@@ -313,6 +309,7 @@ namespace voronoi_path
                 std::cout << node_inf[adj_list[i][j]].y << "\n";
             }
         }
+        std::cout << std::endl;
     }
 
     std::string voronoi_path::hash(const double &x, const double &y)
@@ -324,16 +321,25 @@ namespace voronoi_path
         //when converting nodes to hash key-pairs in edgesToGraph() method
 
         //Number of nodes with (float) cast is usually lesser than without. Indicating disconnected nodes even in close proximity
-        std::string x_string = std::to_string(static_cast<int>(static_cast<float>(x) * hash_resolution));
-        std::string y_string = std::to_string(static_cast<int>(static_cast<float>(y) * hash_resolution));
-        while ((x_string.length() - static_cast<int>(std::log10(hash_resolution))) < hash_length)
+        // std::string x_string = std::to_string(static_cast<int>(static_cast<float>(x) * hash_resolution));
+        // std::string y_string = std::to_string(static_cast<int>(static_cast<float>(y) * hash_resolution));
+
+        // while ((x_string.length() - static_cast<int>(std::log10(hash_resolution))) < hash_length)
+        //     x_string.insert(0, "0");
+
+        // while ((y_string.length() - static_cast<int>(std::log10(hash_resolution))) < hash_length)
+        //     y_string.insert(0, "0");
+
+        std::string x_string = std::to_string(static_cast<int>(x) - static_cast<int>(x) % node_bin_size);
+        std::string y_string = std::to_string(static_cast<int>(y) - static_cast<int>(y) % node_bin_size);
+        
+        while (x_string.length() < hash_length)
             x_string.insert(0, "0");
 
-        while ((y_string.length() - static_cast<int>(std::log10(hash_resolution))) < hash_length)
+        while (y_string.length() < hash_length)
             y_string.insert(0, "0");
 
         ret = x_string + y_string;
-
         return ret;
     }
 
@@ -370,17 +376,17 @@ namespace voronoi_path
             //Get next shortest path
             if (num_paths >= 1)
             {
-                if(print_timings)
+                if (print_timings)
                     std::cout << "Finding alternate paths\n";
-                try
-                {
-                    kthShortestPaths(start_node, end_node, shortest_path, all_paths, num_paths - 1);
-                }
-                catch (const std::exception &e)
-                {
-                    std::cout << "Exception while finding alternate paths, failed to find alternate paths\n";
-                    std::cout << e.what() << std::endl;
-                }
+                // try
+                // {
+                kthShortestPaths(start_node, end_node, shortest_path, all_paths, num_paths - 1);
+                // }
+                // catch (const std::exception &e)
+                // {
+                //     std::cout << "Exception while finding alternate paths, failed to find alternate paths\n";
+                //     std::cout << e.what() << std::endl;
+                // }
             }
 
             if (print_timings)
@@ -581,6 +587,7 @@ namespace voronoi_path
         return std::pow((z - BL), a) + std::pow((z - TR), b);
     }
 
+    //https://www.cs.huji.ac.il/~jeff/aaai10/02/AAAI10-216.pdf
     std::complex<double> voronoi_path::calcHomotopyClass(const std::vector<int> &path_)
     {
         std::vector<std::complex<double>> path;
@@ -606,40 +613,99 @@ namespace voronoi_path
                 al_denom_prod[j] = al_denom_prod[j - 1] * centers[j - 1] / centers[j];
         }
 
-        std::complex<double> path_sum(0, 0);
         //Go through each edge of the path
-        for (int i = 1; i < path.size(); ++i)
+        //FIXME: This is a possibly O(n^2) loop. Could benefit from threading the path loop
+        std::complex<double> path_sum(0, 0);
+        // for (int i = 1; i < path.size(); ++i)
+        // {
+        //     std::complex<double> edge_sum(0, 0);
+
+        //     //Each edge must iterate through all obstacles
+        //     for (int j = 0; j < centers.size(); ++j)
+        //     {
+        //         auto obs = centers[j];
+
+        //         double real_part = std::log(std::abs(path[i] - obs)) - std::log(std::abs(path[i - 1] - obs));
+        //         double im_part = std::arg(path[i] - obs) - std::arg(path[i - 1] - obs);
+
+        //         //Get smallest angle
+        //         while (im_part > M_PI)
+        //             im_part -= 2 * M_PI;
+
+        //         while (im_part < -M_PI)
+        //             im_part += 2 * M_PI;
+
+        //         std::complex<double> al = fNaught(obs, centers.size()) / al_denom_prod[j];
+        //         edge_sum += (std::complex<double>(real_part, im_part) * al);
+        //     }
+        //     //Add this edge's sum to the path sum
+        //     path_sum += edge_sum;
+        // }
+
+        int num_threads = std::thread::hardware_concurrency();
+        std::vector<std::future<std::complex<double>>> future_vector;
+        future_vector.reserve(num_threads);
+
+        int poses_per_thread = path.size() / num_threads;
+
+        for (int i = 0; i < num_threads; ++i)
         {
-            std::complex<double> edge_sum(0, 0);
+            int start_pose = i * poses_per_thread;
+            if (i == num_threads - 1)
+                poses_per_thread = path.size() - poses_per_thread * (num_threads - 1);
 
-            //Each edge must iterate through all obstacles
-            for (int j = 0; j < centers.size(); ++j)
-            {
-                auto obs = centers[j];
+            future_vector.emplace_back(std::async(
+                std::launch::async,
+                [start_pose, poses_per_thread, path, al_denom_prod](const std::vector<std::complex<double>> &centers,
+                                                                    const std::complex<double> &BL,
+                                                                    const std::complex<double> &TR) {
+                    std::complex<double> path_sum(0, 0);
 
-                double real_part = std::log(std::abs(path[i] - obs)) - std::log(std::abs(path[i - 1] - obs));
-                double im_part = std::arg(path[i] - obs) - std::arg(path[i - 1] - obs);
+                    for (int i = start_pose; i < start_pose + poses_per_thread; i++)
+                    {
+                        std::complex<double> edge_sum(0, 0);
 
-                //Get smallest angle
-                while (im_part > M_PI)
-                    im_part -= 2 * M_PI;
+                        //Each edge must iterate through all obstacles
+                        for (int j = 0; j < centers.size(); ++j)
+                        {
+                            auto obs = centers[j];
 
-                while (im_part < -M_PI)
-                    im_part += 2 * M_PI;
+                            double real_part = std::log(std::abs(path[i] - obs)) - std::log(std::abs(path[i - 1] - obs));
+                            double im_part = std::arg(path[i] - obs) - std::arg(path[i - 1] - obs);
 
-                std::complex<double> al = fNaught(obs, centers.size()) / al_denom_prod[j];
-                edge_sum += (std::complex<double>(real_part, im_part) * al);
-            }
-            //Add this edge's sum to the path sum
-            path_sum += edge_sum;
+                            //Get smallest angle
+                            while (im_part > M_PI)
+                                im_part -= 2 * M_PI;
+
+                            while (im_part < -M_PI)
+                                im_part += 2 * M_PI;
+
+                            double a = (centers.size() - 1) / 2.0;
+                            double b = a;
+                            std::complex<double> fNaught = std::pow((obs - BL), a) + std::pow((obs - TR), b);
+
+                            // std::complex<double> al = fNaught(obs, centers.size()) / al_denom_prod[j];
+                            std::complex<double> al = fNaught / al_denom_prod[j];
+                            edge_sum += (std::complex<double>(real_part, im_part) * al);
+                        }
+                        //Add this edge's sum to the path sum
+                        path_sum += edge_sum;
+                    }
+
+                    return path_sum;
+                },
+                std::ref(centers), std::ref(BL), std::ref(TR)));
         }
 
+        for (int i = 0; i < future_vector.size(); ++i)
+        {
+            future_vector[i].wait();
+            std::complex<double> temp_sum = future_vector[i].get();
+            path_sum += temp_sum;
+        }
         return path_sum;
     }
 
-    //TODO: There is issue with path reversing then going towards first shortest path
-    //TODO: Occasionally crashes
-    //TODO: Check efficiency
     bool voronoi_path::kthShortestPaths(const int &start_node, const int &end_node, const std::vector<int> &shortestPath, std::vector<std::vector<int>> &all_paths, const int &num_paths)
     {
         double adjacency_cum_time = 0;
@@ -650,285 +716,272 @@ namespace voronoi_path
         double copy_kth_cum_time = 0;
         double get_total_cost_time = 0;
         double calc_homotopy_cum_time = 0;
+        double check_uniqueness_cum_time = 0;
 
         all_paths.reserve(num_paths + 1);
 
-        try
+        if (num_paths == 0)
         {
-            if (num_paths == 0)
+            all_paths.push_back(shortestPath);
+            return true;
+        }
+
+        std::vector<std::vector<int>> kthPaths;
+        kthPaths.reserve(num_paths + 1);
+        kthPaths.push_back(shortestPath);
+
+        std::vector<std::vector<int>> adj_list_backup(adj_list);
+        std::vector<int> adj_list_modified_ind;
+        int last_root_ind = 0;
+
+        std::vector<std::vector<int>> potentialKth;
+        std::vector<double> cost_vec;
+        std::vector<std::complex<double>> homotopy_classes;
+
+        for (int k = 1; k <= num_paths; ++k)
+        {
+            //Break if cannot find the previous k path, could not find all NUM_PATHS
+            if (k - 1 == kthPaths.size())
+                break;
+
+            cost_vec.clear();
+            potentialKth.clear();
+
+            last_root_ind = 0;
+
+            auto calc_homo_start = std::chrono::system_clock::now();
+            //Update homotopy classes vector whenever new kth path gets added
+            homotopy_classes.emplace_back(calcHomotopyClass(kthPaths.back()));
+            calc_homotopy_cum_time += (std::chrono::system_clock::now() - calc_homo_start).count() / 1000000000.0;
+
+            //Spur node is ith node
+            //Spur node is from start to 2nd last node of path, inclusive
+            for (int i = 0; i < kthPaths[k - 1].size() - 1; ++i)
             {
-                all_paths.push_back(shortestPath);
-                return true;
-            }
+                int spurNode = kthPaths[k - 1][i];
 
-            std::vector<std::vector<int>> kthPaths;
-            kthPaths.reserve(num_paths + 1);
-            kthPaths.push_back(shortestPath);
-            std::vector<std::vector<int>> adj_list_backup(adj_list);
-            std::vector<int> adj_list_removed_edges;
-            std::vector<int> adj_list_modified_ind;
-            int last_root_ind = 0;
+                //Copy root path into container. Root path is path before spur node, containing the path from start onwards
+                //Root path size might be 0 if spurNode is the starting node
+                auto copy_root_time = std::chrono::system_clock::now();
+                std::vector<int> rootPath(i + 1);
+                std::copy(kthPaths[k - 1].begin(), kthPaths[k - 1].begin() + i + 1, rootPath.begin());
+                copy_root_cum_time += (std::chrono::system_clock::now() - copy_root_time).count() / 1000000000.0;
 
-            std::vector<std::vector<int>> potentialKth;
-            std::vector<double> cost_vec;
-
-            for (int k = 1; k <= num_paths; ++k)
-            {
-                //Break if cannot find the previous k path, could not find all NUM_PATHS
-                if (k - 1 == kthPaths.size())
-                    break;
-
-                cost_vec.clear();
-                potentialKth.clear();
-
-                last_root_ind = 0;
-
-                //Spur node is ith node
-                //Spur node is from start to 2nd last node of path, inclusive
-                for (int i = 0; i < kthPaths[k - 1].size() - 1; ++i)
+                //Disconnect edges if root path has already been discovered before
+                auto disconnect_edges_time = std::chrono::system_clock::now();
+                for (auto paths : kthPaths)
                 {
-                    int spurNode = kthPaths[k - 1][i];
-
-                    //Restore/copy adjacency list
-                    auto restore_start = std::chrono::system_clock::now();
-                    for (int z = 0; z < adj_list_removed_edges.size(); ++z)
+                    int equal_count = 0;
+                    for (int z = 0; z <= i; ++z)
                     {
-                        adj_list[adj_list_removed_edges[z]] = adj_list_backup[adj_list_removed_edges[z]];
-                    }
-
-                    adj_list_removed_edges.clear();
-                    adj_list_removed_edges.shrink_to_fit();
-                    adjacency_cum_time += (std::chrono::system_clock::now() - restore_start).count() / 1000000000.0;
-
-                    std::vector<int> rootPath(i + 1);
-
-                    //Copy root path into container. Root path is path before spur node, containing the path from start onwards
-                    //Root path size might be 0 if spurNode is the starting node
-                    auto copy_root_time = std::chrono::system_clock::now();
-                    std::copy(kthPaths[k - 1].begin(), kthPaths[k - 1].begin() + i + 1, rootPath.begin());
-                    copy_root_cum_time += (std::chrono::system_clock::now() - copy_root_time).count() / 1000000000.0;
-
-                    //Disconnect edges if root path has already been discovered before
-                    auto disconnect_edges_time = std::chrono::system_clock::now();
-                    for (auto paths : kthPaths)
-                    {
-                        int equal_count = 0;
-                        for (int z = 0; z <= i; ++z)
-                        {
-                            if (z >= paths.size() || z >= rootPath.size())
-                                break;
-
-                            if (paths[z] == rootPath[z])
-                                equal_count++;
-                        }
-
-                        //Entire root path is identical
-                        if (equal_count == rootPath.size())
-                        {
-                            //Remove edge from spurNode to spur_next
-                            int spur_next = kthPaths[k - 1][i + 1];
-                            auto erase_it = std::find(adj_list[spurNode].begin(), adj_list[spurNode].end(), spur_next);
-
-                            //Edge already removed
-                            if (erase_it == adj_list[spurNode].end())
-                                continue;
-
-                            adj_list[spurNode][erase_it - adj_list[spurNode].begin()] = -1;
-                            adj_list_removed_edges.push_back(spurNode);
-
-                            //Remove edge from spur_next to spurNode
-                            erase_it = std::find(adj_list[spur_next].begin(), adj_list[spur_next].end(), spurNode);
-
-                            //Edge already removed
-                            if (erase_it == adj_list[spurNode].end())
-                                continue;
-
-                            adj_list[spur_next][erase_it - adj_list[spur_next].begin()] = -1;
-                            adj_list_removed_edges.push_back(spur_next);
-
+                        if (z >= paths.size() || z >= rootPath.size())
                             break;
-                        }
+
+                        if (paths[z] == rootPath[z])
+                            equal_count++;
                     }
-                    disconnect_edge_cum_time += (std::chrono::system_clock::now() - disconnect_edges_time).count() / 1000000000.0;
 
-                    //Remove all nodes of root path from graph except spur node and start node
-                    auto node_start_time = std::chrono::system_clock::now();
-
-                    int node = 0;
-                    for (int node_ind = last_root_ind; node_ind < rootPath.size(); ++node_ind)
-                    // for (auto node : rootPath)
+                    //Entire root path is identical
+                    if (equal_count == rootPath.size())
                     {
-                        node = rootPath[node_ind];
-                        if (node == spurNode || node == start_node)
+                        //Remove edge from spurNode to spur_next
+                        int spur_next = kthPaths[k - 1][i + 1];
+                        auto erase_it = std::find(adj_list[spurNode].begin(), adj_list[spurNode].end(), spur_next);
+
+                        //Edge already removed
+                        if (erase_it == adj_list[spurNode].end())
                             continue;
 
-                        for (int del_ind = 0; del_ind < adj_list[node].size(); ++del_ind)
-                        {
-                            //Remove connection from point-er side
-                            int pointed_to = adj_list[node][del_ind];
+                        adj_list[spurNode][erase_it - adj_list[spurNode].begin()] = -1;
+                        adj_list_modified_ind.push_back(spurNode);
 
-                            //Edge is already deleted
-                            if (pointed_to == -1)
-                                continue;
+                        //Remove edge from spur_next to spurNode
+                        erase_it = std::find(adj_list[spur_next].begin(), adj_list[spur_next].end(), spurNode);
 
-                            adj_list[node][del_ind] = -1;
-                            adj_list_modified_ind.push_back(node);
+                        //Edge already removed
+                        if (erase_it == adj_list[spurNode].end())
+                            continue;
 
-                            //Remove connection from point-ed side
-                            auto erase_it = std::find(adj_list[pointed_to].begin(), adj_list[pointed_to].end(), node);
-                            if (erase_it != adj_list[pointed_to].end())
-                            {
-                                adj_list[pointed_to][erase_it - adj_list[pointed_to].begin()] = -1;
-                                adj_list_modified_ind.push_back(pointed_to);
-                            }
+                        adj_list[spur_next][erase_it - adj_list[spur_next].begin()] = -1;
+                        adj_list_modified_ind.push_back(spur_next);
 
-                            last_root_ind = node_ind;
-                        }
+                        break;
                     }
-
-                    remove_nodes_cum_time += (std::chrono::system_clock::now() - node_start_time).count() / 1000000000.0;
-
-                    std::vector<int> spur_path;
-                    double cost;
-
-                    //if spur path is found
-                    auto find_spur_path_start = std::chrono::system_clock::now();
-                    if (findShortestPath(spurNode, end_node, spur_path, cost))
-                    {
-                        spur_path_cum_time += (std::chrono::system_clock::now() - find_spur_path_start).count() / 1000000000.0;
-
-                        std::vector<int> total_path;
-
-                        if (rootPath.size())
-                            total_path.insert(total_path.begin(), rootPath.begin(), rootPath.end() - 1);
-                        total_path.insert(total_path.end(), spur_path.begin(), spur_path.end());
-
-                        //Check if the path just generated is unique in the potential k paths
-                        bool path_is_unique = true;
-
-                        int last = potentialKth.size();
-                        if (kthPaths.size() > potentialKth.size())
-                            last = kthPaths.size();
-
-                        int kth_equal, pot_equal;
-                        for (int check_path = 0; check_path < last; ++check_path)
-                        {
-                            kth_equal = 0;
-                            pot_equal = 0;
-
-                            for (int node_pot = 0; node_pot < total_path.size(); ++node_pot)
-                            {
-                                //Compare with kthPaths
-                                if (check_path < kthPaths.size())
-                                {
-                                    if (node_pot < kthPaths[check_path].size() && node_pot < total_path.size())
-                                        if (kthPaths[check_path][node_pot] == total_path[node_pot])
-                                            kth_equal++;
-                                }
-
-                                //Compare with potentialKths
-                                if (check_path < potentialKth.size())
-                                {
-                                    if (node_pot < potentialKth[check_path].size() && node_pot < total_path.size())
-                                        if (potentialKth[check_path][node_pot] == total_path[node_pot])
-                                            pot_equal++;
-                                }
-                            }
-
-                            if (pot_equal == total_path.size() || kth_equal == total_path.size())
-                                path_is_unique = false;
-                        }
-
-                        //add unique path to potentials
-                        auto get_total_start = std::chrono::system_clock::now();
-                        if (path_is_unique)
-                        {
-                            //Get cost of total path
-                            double total_cost = 0;
-                            for (int int_node = 0; int_node < total_path.size() - 1; ++int_node)
-                            {
-                                total_cost += euclideanDist(node_inf[int_node], node_inf[int_node + 1]);
-                            }
-
-                            cost_vec.push_back(total_cost);
-                            potentialKth.push_back(total_path);
-                        }
-                        get_total_cost_time += (std::chrono::system_clock::now() - get_total_start).count() / 1000000000.0;
-                    }
-
-                    //Reset entire adj_list when spur node changes
-                    for (int i = 0; i < adj_list_modified_ind.size(); ++i)
-                    {
-                        adj_list[adj_list_modified_ind[i]] = adj_list_backup[adj_list_modified_ind[i]];
-                    }
-                    adj_list_modified_ind.clear();
-                    adj_list_modified_ind.shrink_to_fit();
                 }
+                disconnect_edge_cum_time += (std::chrono::system_clock::now() - disconnect_edges_time).count() / 1000000000.0;
 
-                //No alternate paths found
-                if (potentialKth.size() == 0)
-                    break;
-
-                //Find minimum cost path
-                double min_cost = std::numeric_limits<double>::infinity();
-                int copy_index = 0;
-
-                //Calculate homotopy class for all previously generated paths
-                std::vector<std::complex<double>> homotopy_classes;
-                for (auto homotopy_paths : kthPaths)
-                    homotopy_classes.emplace_back(calcHomotopyClass(homotopy_paths));
-
-                for (int min_ind = 0; min_ind < cost_vec.size(); ++min_ind)
+                //Remove all nodes of root path from graph except spur node and start node
+                auto node_start_time = std::chrono::system_clock::now();
+                int node = 0;
+                for (int node_ind = last_root_ind; node_ind < rootPath.size(); ++node_ind)
                 {
-                    if (cost_vec[min_ind] < min_cost)
+                    node = rootPath[node_ind];
+                    if (node == spurNode || node == start_node)
+                        continue;
+
+                    for (int del_ind = 0; del_ind < adj_list[node].size(); ++del_ind)
                     {
-                        auto calc_homo_start = std::chrono::system_clock::now();
+                        //Remove connection from point-er side
+                        int pointed_to = adj_list[node][del_ind];
 
-                        //Get the current potential path's homotopy class
-                        std::complex<double> curr_h_class = calcHomotopyClass(potentialKth[min_ind]);
-                        calc_homotopy_cum_time += (std::chrono::system_clock::now() - calc_homo_start).count() / 1000000000.0;
+                        //Edge is already deleted
+                        if (pointed_to == -1)
+                            continue;
 
-                        //Check that the path is in unique homotopy class compared to previous kthPaths
-                        //Iterate through all path's homotopy class
-                        for (auto h_class : homotopy_classes)
+                        adj_list[node][del_ind] = -1;
+                        adj_list_modified_ind.push_back(node);
+
+                        //Remove connection from point-ed side
+                        auto erase_it = std::find(adj_list[pointed_to].begin(), adj_list[pointed_to].end(), node);
+                        if (erase_it != adj_list[pointed_to].end())
                         {
-                            //This homotopy class path does not exist yet, assign min_cost and copy_index)
-                            //Greater than 1% difference
-                            if(std::abs(curr_h_class - h_class)/std::abs(curr_h_class) > 0.01)
+                            adj_list[pointed_to][erase_it - adj_list[pointed_to].begin()] = -1;
+                            adj_list_modified_ind.push_back(pointed_to);
+                        }
+
+                        last_root_ind = node_ind;
+                    }
+                }
+                remove_nodes_cum_time += (std::chrono::system_clock::now() - node_start_time).count() / 1000000000.0;
+
+                std::vector<int> spur_path;
+                double cost;
+
+                //if spur path is found
+                auto find_spur_path_start = std::chrono::system_clock::now();
+                if (findShortestPath(spurNode, end_node, spur_path, cost))
+                {
+                    spur_path_cum_time += (std::chrono::system_clock::now() - find_spur_path_start).count() / 1000000000.0;
+
+                    std::vector<int> total_path;
+
+                    auto check_unique_start = std::chrono::system_clock::now();
+                    if (rootPath.size())
+                        total_path.insert(total_path.begin(), rootPath.begin(), rootPath.end() - 1);
+                    total_path.insert(total_path.end(), spur_path.begin(), spur_path.end());
+
+                    //Check if the path just generated is unique in the potential k paths
+                    bool path_is_unique = true;
+
+                    int last = potentialKth.size();
+                    if (kthPaths.size() > potentialKth.size())
+                        last = kthPaths.size();
+
+                    int kth_equal, pot_equal;
+                    for (int check_path = 0; check_path < last; ++check_path)
+                    {
+                        kth_equal = 0;
+                        pot_equal = 0;
+
+                        for (int node_pot = 0; node_pot < total_path.size(); ++node_pot)
+                        {
+                            //Compare with kthPaths
+                            if (check_path < kthPaths.size())
                             {
-                                min_cost = cost_vec[min_ind];
-                                copy_index = min_ind;
+                                if (node_pot < kthPaths[check_path].size() && node_pot < total_path.size())
+                                    if (kthPaths[check_path][node_pot] == total_path[node_pot])
+                                        kth_equal++;
                             }
+
+                            //Compare with potentialKths
+                            if (check_path < potentialKth.size())
+                            {
+                                if (node_pot < potentialKth[check_path].size() && node_pot < total_path.size())
+                                    if (potentialKth[check_path][node_pot] == total_path[node_pot])
+                                        pot_equal++;
+                            }
+                        }
+
+                        if (pot_equal == total_path.size() || kth_equal == total_path.size())
+                            path_is_unique = false;
+                    }
+                    check_uniqueness_cum_time += (std::chrono::system_clock::now() - check_unique_start).count() / 1000000000.0;
+
+                    //add unique path to potentials
+                    auto get_total_start = std::chrono::system_clock::now();
+                    if (path_is_unique)
+                    {
+                        //Get cost of total path
+                        double total_cost = 0;
+                        for (int int_node = 0; int_node < total_path.size() - 1; ++int_node)
+                        {
+                            total_cost += euclideanDist(node_inf[total_path[int_node]], node_inf[total_path[int_node + 1]]);
+                        }
+
+                        cost_vec.push_back(total_cost);
+                        potentialKth.push_back(total_path);
+                    }
+                    get_total_cost_time += (std::chrono::system_clock::now() - get_total_start).count() / 1000000000.0;
+                }
+
+                auto restore_start = std::chrono::system_clock::now();
+                //Reset entire adj_list when spur node changes
+                for (int i = 0; i < adj_list_modified_ind.size(); ++i)
+                {
+                    adj_list[adj_list_modified_ind[i]] = adj_list_backup[adj_list_modified_ind[i]];
+                }
+                adj_list_modified_ind.clear();
+                adj_list_modified_ind.shrink_to_fit();
+                adjacency_cum_time += (std::chrono::system_clock::now() - restore_start).count() / 1000000000.0;
+            }
+
+            //No alternate paths found
+            if (potentialKth.size() == 0)
+                break;
+
+            //Find minimum cost path
+            double min_cost = std::numeric_limits<double>::infinity();
+            int copy_index = -1;
+
+            //Calculate homotopy class for all previously generated paths
+            calc_homo_start = std::chrono::system_clock::now();
+            for (int min_ind = 0; min_ind < cost_vec.size(); ++min_ind)
+            {
+                if (cost_vec[min_ind] < min_cost)
+                {
+                    //Get the current potential path's homotopy class
+                    std::complex<double> curr_h_class = calcHomotopyClass(potentialKth[min_ind]);
+
+                    //Check that the path is in unique homotopy class compared to previous kthPaths
+                    //Iterate through all path's homotopy class
+                    for (int h = 0; h < homotopy_classes.size(); ++h)
+                    {
+                        auto h_class = homotopy_classes[h];
+
+                        if (std::abs(curr_h_class - h_class) / std::abs(curr_h_class) <= h_class_threshold)
+                            break;
+
+                        //Checked through all previous paths' classes
+                        if (h == homotopy_classes.size() - 1)
+                        {
+                            min_cost = cost_vec[min_ind];
+                            copy_index = min_ind;
                         }
                     }
                 }
-
-                auto copy_kth = std::chrono::system_clock::now();
-                
-                kthPaths.push_back(potentialKth[copy_index]);
-                copy_kth_cum_time += (std::chrono::system_clock::now() - copy_kth).count() / 1000000000.0;
             }
-            all_paths.insert(all_paths.begin(), kthPaths.begin(), kthPaths.end());
+            calc_homotopy_cum_time += (std::chrono::system_clock::now() - calc_homo_start).count() / 1000000000.0;
+
+            auto copy_kth = std::chrono::system_clock::now();
+            if (copy_index >= 0)
+                kthPaths.push_back(potentialKth[copy_index]);
+
+            copy_kth_cum_time += (std::chrono::system_clock::now() - copy_kth).count() / 1000000000.0;
         }
 
-        catch (const std::exception &e)
-        {
-            std::cout << "Exception while finding alternate paths, failed to find alternate paths\n";
-            std::cout << e.what() << std::endl;
-            all_paths.push_back(shortestPath);
-            return false;
-        }
+        all_paths.insert(all_paths.begin(), kthPaths.begin(), kthPaths.end());
 
         if (print_timings)
         {
-            std::cout << "Cum adjacency list restore: " << adjacency_cum_time << std::endl;
-            std::cout << "Cum copy root path: " << copy_root_cum_time << std::endl;
-            std::cout << "Cum disconnect edges: " << disconnect_edge_cum_time << std::endl;
-            std::cout << "Cum remove nodes of root path: " << remove_nodes_cum_time << std::endl;
-            std::cout << "Cum find spur path: " << spur_path_cum_time << std::endl;
-            std::cout << "Cum copy kth path: " << copy_kth_cum_time << std::endl;
-            std::cout << "Cum get total cost: " << get_total_cost_time << std::endl;
-            std::cout << "Cum calc homotopy: " << calc_homotopy_cum_time << std::endl;
+            std::cout << "Cum adjacency list restore: " << adjacency_cum_time << "\n";
+            std::cout << "Cum copy root path: " << copy_root_cum_time << "\n";
+            std::cout << "Cum disconnect edges: " << disconnect_edge_cum_time << "\n";
+            std::cout << "Cum remove nodes of root path: " << remove_nodes_cum_time << "\n";
+            std::cout << "Cum find spur path: " << spur_path_cum_time << "\n";
+            std::cout << "Cum copy kth path: " << copy_kth_cum_time << "\n";
+            std::cout << "Cum get total cost: " << get_total_cost_time << "\n";
+            std::cout << "Cum calc homotopy: " << calc_homotopy_cum_time << "\n";
+            std::cout << "Cum check unique: " << check_uniqueness_cum_time << "\n";
         }
 
         if (num_paths == all_paths.size() - 1)

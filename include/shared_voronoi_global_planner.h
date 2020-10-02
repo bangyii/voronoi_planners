@@ -42,6 +42,7 @@ namespace shared_voronoi_global_planner
         double update_voronoi_rate = 0.3;
         double update_costmap_rate = 0.3;
         bool print_timings = true;
+        bool publish_centroids = false;
 
         /**
          * Number of decimals to use for hashing, separate from hash_length. 10 means 1 decimal, 1 means 0 decimals.
@@ -103,7 +104,13 @@ namespace shared_voronoi_global_planner
 
         double forward_sim_time = 1.0;       //s
         double forward_sim_resolution = 0.1; //m
+        double near_goal_threshold = 1.0;
         bool add_local_costmap_corners = true;
+        bool publish_all_path_markers = false;
+        double user_dir_filter = 0.9;
+        double prev_local_dir = 0.0;
+        int node_bin_size = 1;
+        
         std::vector<std::pair<int, int>> map_pixels_backup;
 
         ros::NodeHandle nh;
@@ -111,9 +118,12 @@ namespace shared_voronoi_global_planner
         ros::Subscriber global_costmap_sub;
         ros::Subscriber global_update_sub;
         ros::Subscriber user_vel_sub;
+
         ros::Publisher merged_costmap_pub;
         ros::Publisher global_path_pub;
-        ros::Publisher alternate_path_pub;
+        ros::Publisher all_paths_pub;
+        ros::Publisher user_direction_pub;
+
         ros::WallTimer voronoi_update_timer;
         ros::WallTimer map_update_timer;
         geometry_msgs::Twist cmd_vel;
@@ -128,6 +138,7 @@ namespace shared_voronoi_global_planner
         void cmdVelCB(const geometry_msgs::Twist::ConstPtr &msg);
         void threadedMapCleanup();
         int getMatchedPath(const geometry_msgs::PoseStamped &curr_pose, const std::vector<std::vector<geometry_msgs::PoseStamped>> &plans_);
+        double vectorAngle(const double vec1[2], const double vec2[2]);
     };
 }; // namespace shared_voronoi_global_planner
 

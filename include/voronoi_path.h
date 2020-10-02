@@ -268,6 +268,8 @@ namespace voronoi_path
          * Distance to put the extra point which is used to ensure continuity, units meter
          **/
         double extra_point_distance = 1.0;
+
+        int node_bin_size = 1;
     
     private:
         Map map;

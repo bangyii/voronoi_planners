@@ -18,6 +18,7 @@ find_package(catkin REQUIRED COMPONENTS
   base_local_planner
   costmap_2d
   tf2
+  visualization_msgs
 )
 
 find_package(OpenCV 3 REQUIRED)
