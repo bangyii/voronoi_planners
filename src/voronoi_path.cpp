@@ -245,7 +245,7 @@ namespace voronoi_path
         auto adj_list_time = std::chrono::system_clock::now();
 
         //Convert edges to adjacency list
-        std::map<std::string, int> hash_index_map;
+        std::unordered_map<std::string, int> hash_index_map;
         for (int i = 0; i < edge_vector.size(); ++i)
         {
             //Get hash for both vertices of the current edge
@@ -263,9 +263,14 @@ namespace voronoi_path
 
                 else
                 {
+                    //Convert coordinates to same format as value that was used for hash
+                    double x_short = static_cast<int>(edge_vector[i].pos[j].x) - static_cast<int>(edge_vector[i].pos[j].x) % node_bin_size;
+                    double y_short = static_cast<int>(edge_vector[i].pos[j].y) - static_cast<int>(edge_vector[i].pos[j].y) % node_bin_size;
+
                     //Add new node to adjacency list & info vector, and respective hash and node index to map
                     node_index[j] = adj_list.size();
-                    node_inf.emplace_back(edge_vector[i].pos[j].x, edge_vector[i].pos[j].y);
+                    // node_inf.emplace_back(edge_vector[i].pos[j].x, edge_vector[i].pos[j].y);
+                    node_inf.emplace_back(x_short, y_short);
                     adj_list.push_back(std::vector<int>());
                     hash_index_map.insert(std::pair<std::string, int>(hash_vec[j], node_index[j]));
                 }
@@ -651,19 +656,24 @@ namespace voronoi_path
         for (int i = 0; i < num_threads; ++i)
         {
             int start_pose = i * poses_per_thread;
+
+            //Last thread takes remaining poses
             if (i == num_threads - 1)
                 poses_per_thread = path.size() - poses_per_thread * (num_threads - 1);
 
             future_vector.emplace_back(std::async(
                 std::launch::async,
-                [start_pose, poses_per_thread, path, al_denom_prod](const std::vector<std::complex<double>> &centers,
+                [&, start_pose, poses_per_thread, path, al_denom_prod](const std::vector<std::complex<double>> &centers,
                                                                     const std::complex<double> &BL,
                                                                     const std::complex<double> &TR) {
-                    std::complex<double> path_sum(0, 0);
 
-                    for (int i = start_pose; i < start_pose + poses_per_thread; i++)
+                    std::complex<double> path_sum(0, 0);
+                    for (int i = start_pose + 1; i < start_pose + poses_per_thread + 1; i++)
                     {
                         std::complex<double> edge_sum(0, 0);
+
+                        if(i >= path.size())
+                            continue;
 
                         //Each edge must iterate through all obstacles
                         for (int j = 0; j < centers.size(); ++j)
@@ -684,7 +694,6 @@ namespace voronoi_path
                             double b = a;
                             std::complex<double> fNaught = std::pow((obs - BL), a) + std::pow((obs - TR), b);
 
-                            // std::complex<double> al = fNaught(obs, centers.size()) / al_denom_prod[j];
                             std::complex<double> al = fNaught / al_denom_prod[j];
                             edge_sum += (std::complex<double>(real_part, im_part) * al);
                         }
@@ -933,7 +942,7 @@ namespace voronoi_path
             double min_cost = std::numeric_limits<double>::infinity();
             int copy_index = -1;
 
-            //Calculate homotopy class for all previously generated paths
+            //Find minimum kth path that is unique in homotopy class
             calc_homo_start = std::chrono::system_clock::now();
             for (int min_ind = 0; min_ind < cost_vec.size(); ++min_ind)
             {
@@ -946,9 +955,7 @@ namespace voronoi_path
                     //Iterate through all path's homotopy class
                     for (int h = 0; h < homotopy_classes.size(); ++h)
                     {
-                        auto h_class = homotopy_classes[h];
-
-                        if (std::abs(curr_h_class - h_class) / std::abs(curr_h_class) <= h_class_threshold)
+                        if (std::abs(curr_h_class - homotopy_classes[h]) / std::abs(curr_h_class) <= h_class_threshold)
                             break;
 
                         //Checked through all previous paths' classes
