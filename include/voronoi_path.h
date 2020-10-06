@@ -206,13 +206,6 @@ namespace voronoi_path
         bool isUpdatingVoronoi();
 
         /**
-         * Number of decimals to use for hashing, separate from hash_length. 10 means 1 decimal, 1 means 0 decimals.
-         * ie total length of string post-hash for 1151.345 if hash_resolution = 10.0 and hash_length = 6 
-         * is "0011513"
-         **/
-        double hash_resolution = 10.0;
-
-        /**
          * Number of digits to allow before decimal point. Number of digits should be greater than map size in pixels
          **/
         int hash_length = 6;
@@ -269,7 +262,7 @@ namespace voronoi_path
          **/
         double extra_point_distance = 1.0;
 
-        int node_bin_size = 1;
+        double min_edge_length = 0.5;
     
     private:
         Map map;
@@ -318,10 +311,13 @@ namespace voronoi_path
         std::atomic<bool> updating_voronoi;
 
         /**
-         * Atomic flag indicating whether path finding is ocurring. adj_list is being used while this flag is true,
+         * Atomic flag indicating whether path finding is running. adj_list is being used while this flag is true,
          * voronoi diagram should not be updated when planning is happening
          **/
         std::atomic<bool> is_planning;
+
+        //TODO: Comments
+        std::vector<std::complex<double>> obs_coeff;
 
         /**
          * Variables used for tracking execution speed of several sections
@@ -458,16 +454,6 @@ namespace voronoi_path
          * @return vector containing Bezier curve points
          **/
         std::vector<GraphNode> bezierSubsection(std::vector<GraphNode> &points);
-
-
-        /**
-         * Formula used for calculating homotopy class, from paper "Search-Based Path Planning with Homotopy Class Constraints"
-         * by Subhrajit Bhattacharya et al
-         * @param z obstacle to calculate f0 for
-         * @param n number of obstacles
-         * @return f0 result, in complex form
-         **/
-        std::complex<double> fNaught(const std::complex<double> &z, const int &n);
         
         /**
          * Calculate the homotopy class, algorithm from paper "Search-Based Path Planning with Homotopy Class Constraints"

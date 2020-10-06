@@ -85,7 +85,28 @@ namespace voronoi_path
 
             // cv::imshow("window", drawing);
             // cv::waitKey(0);
-            //TODO: Upsize back contour centers
+
+            double a = (centers.size() - 1) / 2.0;
+            double b = a;
+            obs_coeff.clear();
+            obs_coeff.reserve(centers.size());
+            std::complex<double> al_denom_prod(1,1);
+            for(int i = 0; i < centers.size(); ++i)
+            {
+                auto obs = centers[i];
+                if(i == 0)
+                {
+                    for(int j = 1; j < centers.size(); ++j)
+                        al_denom_prod *= (obs - centers[j]);
+                }
+
+                else 
+                    al_denom_prod = al_denom_prod * centers[i - 1] / centers[i];
+
+                std::complex<double> fNaught = std::pow((obs - BL), a) + std::pow((obs - TR), b);
+
+                obs_coeff.emplace_back(std::move(fNaught/al_denom_prod));
+            }
 
             if (print_timings)
                 std::cout << "Time to find contour " << (std::chrono::system_clock::now() - start_time).count() / 1000000000.0 << std::endl;
@@ -96,7 +117,6 @@ namespace voronoi_path
 
     std::vector<jcv_point> voronoi_path::fillOccupancyVector(const int &start_index, const int &num_pixels)
     {
-        //TODO: Reserve num_pixels for points_vec? Could end up using more memory
         std::vector<jcv_point> points_vec;
         for (int i = start_index; i < start_index + num_pixels; i += (pixels_to_skip + 1))
         {
@@ -107,7 +127,6 @@ namespace voronoi_path
                 temp_point.x = i % map.width;
                 temp_point.y = static_cast<int>(i / map.width);
 
-                //TODO: use move? Old point no longer required. Emplace back makes no difference
                 points_vec.push_back(temp_point);
             }
         }
@@ -263,14 +282,9 @@ namespace voronoi_path
 
                 else
                 {
-                    //Convert coordinates to same format as value that was used for hash
-                    double x_short = static_cast<int>(edge_vector[i].pos[j].x) - static_cast<int>(edge_vector[i].pos[j].x) % node_bin_size;
-                    double y_short = static_cast<int>(edge_vector[i].pos[j].y) - static_cast<int>(edge_vector[i].pos[j].y) % node_bin_size;
-
                     //Add new node to adjacency list & info vector, and respective hash and node index to map
                     node_index[j] = adj_list.size();
-                    // node_inf.emplace_back(edge_vector[i].pos[j].x, edge_vector[i].pos[j].y);
-                    node_inf.emplace_back(x_short, y_short);
+                    node_inf.emplace_back(edge_vector[i].pos[j].x, edge_vector[i].pos[j].y);
                     adj_list.push_back(std::vector<int>());
                     hash_index_map.insert(std::pair<std::string, int>(hash_vec[j], node_index[j]));
                 }
@@ -319,24 +333,8 @@ namespace voronoi_path
 
     std::string voronoi_path::hash(const double &x, const double &y)
     {
-        std::string ret;
-
-        //!!!!!!! Inaccurate results if (float) cast is removed. !!!!!!
-        //Suspect it's inconsistent accuracy difference, causing nodes to become disconnected from small rounding errors
-        //when converting nodes to hash key-pairs in edgesToGraph() method
-
-        //Number of nodes with (float) cast is usually lesser than without. Indicating disconnected nodes even in close proximity
-        // std::string x_string = std::to_string(static_cast<int>(static_cast<float>(x) * hash_resolution));
-        // std::string y_string = std::to_string(static_cast<int>(static_cast<float>(y) * hash_resolution));
-
-        // while ((x_string.length() - static_cast<int>(std::log10(hash_resolution))) < hash_length)
-        //     x_string.insert(0, "0");
-
-        // while ((y_string.length() - static_cast<int>(std::log10(hash_resolution))) < hash_length)
-        //     y_string.insert(0, "0");
-
-        std::string x_string = std::to_string(static_cast<int>(x) - static_cast<int>(x) % node_bin_size);
-        std::string y_string = std::to_string(static_cast<int>(y) - static_cast<int>(y) % node_bin_size);
+        std::string x_string = std::to_string(static_cast<int>(x));
+        std::string y_string = std::to_string(static_cast<int>(y));
         
         while (x_string.length() < hash_length)
             x_string.insert(0, "0");
@@ -344,8 +342,7 @@ namespace voronoi_path
         while (y_string.length() < hash_length)
             y_string.insert(0, "0");
 
-        ret = x_string + y_string;
-        return ret;
+        return x_string + y_string;
     }
 
     std::vector<std::vector<GraphNode>> voronoi_path::getPath(const GraphNode &start, const GraphNode &end, const int &num_paths)
@@ -383,15 +380,8 @@ namespace voronoi_path
             {
                 if (print_timings)
                     std::cout << "Finding alternate paths\n";
-                // try
-                // {
+
                 kthShortestPaths(start_node, end_node, shortest_path, all_paths, num_paths - 1);
-                // }
-                // catch (const std::exception &e)
-                // {
-                //     std::cout << "Exception while finding alternate paths, failed to find alternate paths\n";
-                //     std::cout << e.what() << std::endl;
-                // }
             }
 
             if (print_timings)
@@ -428,7 +418,7 @@ namespace voronoi_path
 
                 //For all nodes in path
                 for (int i = 1; i < num_of_nodes; ++i)
-                {
+                { 
                     //Add previous node and extra node if sub_nodes was recently reset due to collision or initialization
                     if (sub_nodes.size() == 0)
                     {
@@ -458,7 +448,7 @@ namespace voronoi_path
                     {
                         sub_nodes.push_back(all_path_nodes[j][i]);
                     }
-
+                    //FIXME: Causes infinite loop
                     //Collision happened or limit reached, find sub path with current sub nodes
                     else
                     {
@@ -468,7 +458,10 @@ namespace voronoi_path
                         //Calculate the bezier subsection
                         std::vector<GraphNode> temp_bezier = bezierSubsection(sub_nodes);
                         bezier_path.insert(bezier_path.end(), temp_bezier.begin(), temp_bezier.end());
-                        prev_2_nodes.insert(prev_2_nodes.begin(), sub_nodes.end() - 2, sub_nodes.end());
+
+                        if(sub_nodes.size() > 1)
+                            prev_2_nodes.insert(prev_2_nodes.begin(), sub_nodes.end() - 2, sub_nodes.end());
+
                         sub_nodes.clear();
                     }
                 }
@@ -502,13 +495,13 @@ namespace voronoi_path
         auto start_time = std::chrono::system_clock::now();
         //TODO: Should not only check nearest nodes. Should allow nearest position to be on an edge
         //Find node nearest to starting point and ending point
-        double start_end_vec[2] = {end.x - start.x, end.y - start.y};
-        double start_next_vec[2];
+        // double start_end_vec[2] = {end.x - start.x, end.y - start.y};
+        // double start_next_vec[2];
 
         double min_start_dist = std::numeric_limits<double>::infinity();
-        double min_rev_start_dist = std::numeric_limits<double>::infinity();
+        // double min_rev_start_dist = std::numeric_limits<double>::infinity();
         double min_end_dist = std::numeric_limits<double>::infinity();
-        int reverse_start = -1;
+        // int reverse_start = -1;
         start_node = -1;
         end_node = -1;
 
@@ -520,8 +513,8 @@ namespace voronoi_path
             curr.x = node_inf[i].x;
             curr.y = node_inf[i].y;
 
-            start_next_vec[0] = curr.x - start.x;
-            start_next_vec[1] = curr.y - start.y;
+            // start_next_vec[0] = curr.x - start.x;
+            // start_next_vec[1] = curr.y - start.y;
 
             temp_start_dist = pow(curr.x - start.x, 2) + pow(curr.y - start.y, 2);
             temp_end_dist = pow(curr.x - end.x, 2) + pow(curr.y - end.y, 2);
@@ -529,32 +522,32 @@ namespace voronoi_path
             //If potential starting node brings robot towards end goal
             if (temp_start_dist < min_start_dist)
             {
-                ang = fabs(vectorAngle(start_end_vec, start_next_vec));
-                if (ang < M_PI / 2.0)
-                {
+                // ang = fabs(vectorAngle(start_end_vec, start_next_vec));
+                // if (ang < M_PI / 2.0)
+                // {
                     if (!edgeCollides(start, curr))
                     {
                         min_start_dist = temp_start_dist;
                         start_node = i;
                     }
-                }
+                // }
 
                 //TODO: Should consider reverse start here
             }
 
-            //Else if potential starting node requires robot to go away from end goal
-            else if (temp_start_dist < min_rev_start_dist)
-            {
-                ang = fabs(vectorAngle(start_end_vec, start_next_vec));
-                if (ang >= M_PI / 2.0)
-                {
-                    if (!edgeCollides(start, curr))
-                    {
-                        min_rev_start_dist = temp_start_dist;
-                        reverse_start = i;
-                    }
-                }
-            }
+            // //Else if potential starting node requires robot to go away from end goal
+            // else if (temp_start_dist < min_rev_start_dist)
+            // {
+            //     ang = fabs(vectorAngle(start_end_vec, start_next_vec));
+            //     if (ang >= M_PI / 2.0)
+            //     {
+            //         if (!edgeCollides(start, curr))
+            //         {
+            //             min_rev_start_dist = temp_start_dist;
+            //             reverse_start = i;
+            //         }
+            //     }
+            // }
 
             if (temp_end_dist < min_end_dist)
             {
@@ -566,9 +559,9 @@ namespace voronoi_path
             }
         }
 
-        //Relax criterion on requiring forward start if forward start nearest node is not found
-        if (start_node == -1)
-            start_node = reverse_start;
+        // //Relax criterion on requiring forward start if forward start nearest node is not found
+        // if (start_node == -1)
+        //     start_node = reverse_start;
 
         //Failed to find start/end even after relaxation
         if (start_node == -1 || end_node == -1)
@@ -582,16 +575,6 @@ namespace voronoi_path
         return true;
     }
 
-    std::complex<double> voronoi_path::fNaught(const std::complex<double> &z, const int &n)
-    {
-        //a - b = 0
-        //a + b = n - 1
-        //TODO: Implement check that this is a valid combination of a and b
-        double a = (n - 1) / 2.0;
-        double b = a;
-        return std::pow((z - BL), a) + std::pow((z - TR), b);
-    }
-
     //https://www.cs.huji.ac.il/~jeff/aaai10/02/AAAI10-216.pdf
     std::complex<double> voronoi_path::calcHomotopyClass(const std::vector<int> &path_)
     {
@@ -602,51 +585,8 @@ namespace voronoi_path
         for (auto node : path_)
             path.emplace_back(node_inf[node].x, node_inf[node].y);
 
-        //Calculate all coefficients
-        std::vector<std::complex<double>> al_denom_prod(centers.size(), std::complex<double>(1, 1));
-        for (int j = 0; j < centers.size(); ++j)
-        {
-            auto obs = centers[j];
-            if (j == 0)
-            {
-                for (int k = 1; k < centers.size(); ++k)
-                    al_denom_prod[j] *= (obs - centers[k]);
-            }
-
-            //Otherwise, multiply centers[j-1] and divide centers[j]
-            else
-                al_denom_prod[j] = al_denom_prod[j - 1] * centers[j - 1] / centers[j];
-        }
-
         //Go through each edge of the path
-        //FIXME: This is a possibly O(n^2) loop. Could benefit from threading the path loop
         std::complex<double> path_sum(0, 0);
-        // for (int i = 1; i < path.size(); ++i)
-        // {
-        //     std::complex<double> edge_sum(0, 0);
-
-        //     //Each edge must iterate through all obstacles
-        //     for (int j = 0; j < centers.size(); ++j)
-        //     {
-        //         auto obs = centers[j];
-
-        //         double real_part = std::log(std::abs(path[i] - obs)) - std::log(std::abs(path[i - 1] - obs));
-        //         double im_part = std::arg(path[i] - obs) - std::arg(path[i - 1] - obs);
-
-        //         //Get smallest angle
-        //         while (im_part > M_PI)
-        //             im_part -= 2 * M_PI;
-
-        //         while (im_part < -M_PI)
-        //             im_part += 2 * M_PI;
-
-        //         std::complex<double> al = fNaught(obs, centers.size()) / al_denom_prod[j];
-        //         edge_sum += (std::complex<double>(real_part, im_part) * al);
-        //     }
-        //     //Add this edge's sum to the path sum
-        //     path_sum += edge_sum;
-        // }
-
         int num_threads = std::thread::hardware_concurrency();
         std::vector<std::future<std::complex<double>>> future_vector;
         future_vector.reserve(num_threads);
@@ -663,7 +603,7 @@ namespace voronoi_path
 
             future_vector.emplace_back(std::async(
                 std::launch::async,
-                [&, start_pose, poses_per_thread, path, al_denom_prod](const std::vector<std::complex<double>> &centers,
+                [&, start_pose, poses_per_thread, path](const std::vector<std::complex<double>> &centers,
                                                                     const std::complex<double> &BL,
                                                                     const std::complex<double> &TR) {
 
@@ -690,12 +630,7 @@ namespace voronoi_path
                             while (im_part < -M_PI)
                                 im_part += 2 * M_PI;
 
-                            double a = (centers.size() - 1) / 2.0;
-                            double b = a;
-                            std::complex<double> fNaught = std::pow((obs - BL), a) + std::pow((obs - TR), b);
-
-                            std::complex<double> al = fNaught / al_denom_prod[j];
-                            edge_sum += (std::complex<double>(real_part, im_part) * al);
+                            edge_sum += (std::complex<double>(real_part, im_part) * obs_coeff[j]);
                         }
                         //Add this edge's sum to the path sum
                         path_sum += edge_sum;

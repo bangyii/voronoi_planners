@@ -45,13 +45,6 @@ namespace shared_voronoi_global_planner
         bool publish_centroids = false;
 
         /**
-         * Number of decimals to use for hashing, separate from hash_length. 10 means 1 decimal, 1 means 0 decimals.
-         * ie total length of string post-hash for 1151.345 if hash_resolution = 10.0 and hash_length = 6 
-         * is "0011513"
-         **/
-        double hash_resolution = 10.0;
-
-        /**
          * Number of digits to allow before decimal point. Number of digits should be greater than map size in pixels
          **/
         int hash_length = 6;
@@ -109,7 +102,12 @@ namespace shared_voronoi_global_planner
         bool publish_all_path_markers = false;
         double user_dir_filter = 0.9;
         double prev_local_dir = 0.0;
-        int node_bin_size = 1;
+        double min_edge_length = 0.5;
+        std::string joystick_topic = "/test_vel";
+        bool print_edges = false;
+
+        std::vector<geometry_msgs::PoseStamped> prev_path;
+        geometry_msgs::PoseStamped prev_goal;
         
         std::vector<std::pair<int, int>> map_pixels_backup;
 

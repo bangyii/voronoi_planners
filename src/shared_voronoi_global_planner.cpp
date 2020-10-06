@@ -34,7 +34,9 @@ namespace shared_voronoi_global_planner
         }
 
         voronoi_path.mapToGraph(map);
-        // voronoi_path.printEdges();
+
+        if(print_edges)
+            voronoi_path.printEdges();
     }
 
     void SharedVoronoiGlobalPlanner::updateVoronoiMapCB(const ros::WallTimerEvent &e)
@@ -62,7 +64,6 @@ namespace shared_voronoi_global_planner
             nh.getParam("update_voronoi_rate", update_voronoi_rate);
             nh.getParam("update_costmap_rate", update_costmap_rate);
             nh.getParam("print_timings", print_timings);
-            nh.getParam("hash_resolution", hash_resolution);
             nh.getParam("hash_length", hash_length);
             nh.getParam("line_check_resolution", line_check_resolution);
             nh.getParam("pixels_to_skip", pixels_to_skip);
@@ -75,12 +76,13 @@ namespace shared_voronoi_global_planner
             nh.getParam("num_paths", num_paths);
             nh.getParam("publish_all_path_markers", publish_all_path_markers);
             nh.getParam("user_dir_filter", user_dir_filter);
-            nh.getParam("node_bin_size", node_bin_size);
+            nh.getParam("min_edge_length", min_edge_length);
+            nh.getParam("joystick_topic", joystick_topic);
+            nh.getParam("print_edges", print_edges);
 
             voronoi_path.h_class_threshold = h_class_threshold;
             voronoi_path.print_timings = print_timings;
-            voronoi_path.hash_resolution = hash_resolution;
-            voronoi_path.node_bin_size = node_bin_size;
+            voronoi_path.min_edge_length = min_edge_length;
 
             //Subscribe and advertise related topics
             global_costmap_sub = nh.subscribe("/move_base/global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);
@@ -109,33 +111,6 @@ namespace shared_voronoi_global_planner
 
     bool SharedVoronoiGlobalPlanner::makePlan(const geometry_msgs::PoseStamped &start, const geometry_msgs::PoseStamped &goal, std::vector<geometry_msgs::PoseStamped> &plan)
     {
-        //TODO: Setup publishing of centroid visualization markers
-        // //Centers are in terms of pixel of original image. Not in meters
-        // std::vector<voronoi_path::GraphNode> centers = voronoi_path.findObstacleCentroids();
-        // nav_msgs::Path centroid_path;
-        // centroid_path.header.stamp = ros::Time::now();
-        // centroid_path.header.frame_id = start.header.frame_id;
-        // for(auto centroids : centers)
-        // {
-        //     geometry_msgs::PoseStamped new_pose;
-        //     new_pose.header = centroid_path.header;
-        //     new_pose.pose.orientation.w = 1;
-
-        //     new_pose.pose.position.x = centroids.x * map.resolution - map.origin.position.x;
-        //     new_pose.pose.position.y = centroids.y * map.resolution - map.origin.position.y;
-        //     new_pose.pose.position.z = 0;
-
-        //     if(isnan(new_pose.pose.position.x))
-        //         new_pose.pose.position.x = -100;
-
-        //     if(isnan(new_pose.pose.position.y))
-        //         new_pose.pose.position.y = -100;
-
-        //     centroid_path.poses.push_back(new_pose);
-        // }
-        // std::cout << "Publishing centroid path\n";
-        // centroid_pub.publish(centroid_path);
-
         //Get start and end points in terms of global costmap pixels
         voronoi_path::GraphNode start_point((start.pose.position.x - merged_costmap.info.origin.position.x) / merged_costmap.info.resolution,
                                             (start.pose.position.y - merged_costmap.info.origin.position.y) / merged_costmap.info.resolution);
@@ -152,6 +127,22 @@ namespace shared_voronoi_global_planner
             r.sleep();
         }
 
+        //Reset previous path if goal has changed
+        if (prev_goal.header.frame_id.empty())
+            prev_goal = goal;
+
+        else
+        {
+            //If goal has changed
+            if (prev_goal.pose.position.x != goal.pose.position.x ||
+                prev_goal.pose.position.y != goal.pose.position.y ||
+                prev_goal.pose.position.z != goal.pose.position.z)
+            {
+                prev_goal = goal;
+                prev_path.clear();
+            }
+        }
+
         //Get voronoi paths
         std::vector<std::vector<voronoi_path::GraphNode>> all_paths = voronoi_path.getPath(start_point, end_point, num_paths);
 
@@ -164,7 +155,7 @@ namespace shared_voronoi_global_planner
             std::vector<std::vector<geometry_msgs::PoseStamped>> all_paths_meters(all_paths.size());
             visualization_msgs::MarkerArray marker_array;
 
-            //Conver node numbers to position on map for path
+            //Convert node numbers to position on map for path
             std_msgs::Header header;
             header.stamp = ros::Time::now();
             header.frame_id = merged_costmap.header.frame_id;
@@ -220,18 +211,33 @@ namespace shared_voronoi_global_planner
             if (publish_all_path_markers)
                 all_paths_pub.publish(marker_array);
 
+            //Prune previous selected path
+            while (!prev_path.empty())
+            {
+                double dist = sqrt(pow(prev_path[0].pose.position.x - start.pose.position.x, 2) + pow(prev_path[0].pose.position.y - start.pose.position.y, 2));
+                if (dist < 0.3)
+                    prev_path.erase(prev_path.begin());
+
+                else
+                    break;
+            }
+
+            //Add previously selected path into selections
+            if(!prev_path.empty())
+                all_paths_meters.push_back(prev_path);
+
             //Select the path most similar to user commanded velocity path
             int preferred_path = 0;
             double dist = pow(start.pose.position.x - goal.pose.position.x, 2) + pow(start.pose.position.y - goal.pose.position.y, 2);
             if ((cmd_vel.linear.x != 0.0 || cmd_vel.angular.z != 0.0) && dist > pow(near_goal_threshold, 2))
-            {
-                // std::cout << "User input received, selecting most similar path\n";
                 preferred_path = getMatchedPath(start, all_paths_meters);
-            }
 
             //Set selected plan
             if (!all_paths_meters[preferred_path].empty())
+            {
                 plan = all_paths_meters[preferred_path];
+                prev_path = plan;
+            }
 
             //Publish selected plan for visualization
             nav_msgs::Path viz_path;
@@ -279,7 +285,7 @@ namespace shared_voronoi_global_planner
         double new_local_dir = user_dir_filter * atan2(cmd_vel.angular.z, cmd_vel.linear.x) + (1 - user_dir_filter) * prev_local_dir;
         double theta = tf::getYaw(curr_pose.pose.orientation) + new_local_dir;
         prev_local_dir = new_local_dir;
-        
+
         user_path.emplace_back(x, y);
 
         double curr_time = 0.0;
