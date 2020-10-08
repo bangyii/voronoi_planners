@@ -146,7 +146,7 @@ namespace shared_voronoi_global_planner
         //Get voronoi paths
         std::vector<std::vector<voronoi_path::GraphNode>> all_paths = voronoi_path.getPath(start_point, end_point, num_paths);
 
-        if (all_paths.size() != num_paths)
+        if (all_paths.size() < num_paths)
             ROS_WARN("Could not find all requested paths. Requested: %d, found: %ld", num_paths, all_paths.size());
 
         //If paths are found

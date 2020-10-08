@@ -90,22 +90,22 @@ namespace voronoi_path
             double b = a;
             obs_coeff.clear();
             obs_coeff.reserve(centers.size());
-            std::complex<double> al_denom_prod(1,1);
-            for(int i = 0; i < centers.size(); ++i)
+            std::complex<double> al_denom_prod(1, 1);
+            for (int i = 0; i < centers.size(); ++i)
             {
                 auto obs = centers[i];
-                if(i == 0)
+                if (i == 0)
                 {
-                    for(int j = 1; j < centers.size(); ++j)
+                    for (int j = 1; j < centers.size(); ++j)
                         al_denom_prod *= (obs - centers[j]);
                 }
 
-                else 
+                else
                     al_denom_prod = al_denom_prod * centers[i - 1] / centers[i];
 
                 std::complex<double> fNaught = std::pow((obs - BL), a) + std::pow((obs - TR), b);
 
-                obs_coeff.emplace_back(std::move(fNaught/al_denom_prod));
+                obs_coeff.emplace_back(std::move(fNaught / al_denom_prod));
             }
 
             if (print_timings)
@@ -335,7 +335,7 @@ namespace voronoi_path
     {
         std::string x_string = std::to_string(static_cast<int>(x));
         std::string y_string = std::to_string(static_cast<int>(y));
-        
+
         while (x_string.length() < hash_length)
             x_string.insert(0, "0");
 
@@ -364,7 +364,7 @@ namespace voronoi_path
             is_planning = false;
             return path;
         }
-
+        shortest_path_call_count = 0;
         std::vector<int> shortest_path;
         double cost;
         auto shortest_time = std::chrono::system_clock::now();
@@ -387,6 +387,7 @@ namespace voronoi_path
             if (print_timings)
                 std::cout << "Find alternate paths: \t" << ((std::chrono::system_clock::now() - kth_time).count() / 1000000000.0) << "s\n";
 
+            auto p_process_start = std::chrono::system_clock::now();
             //Copy all_paths into new container which include start and end
             std::vector<std::vector<GraphNode>> all_path_nodes;
             all_path_nodes.reserve(all_paths.size());
@@ -407,6 +408,7 @@ namespace voronoi_path
             }
 
             //Bezier interpolation
+            //TODO: Can be threaded as well
             //For all paths, j = path number
             for (int j = 0; j < all_path_nodes.size(); ++j)
             {
@@ -418,7 +420,7 @@ namespace voronoi_path
 
                 //For all nodes in path
                 for (int i = 1; i < num_of_nodes; ++i)
-                { 
+                {
                     //Add previous node and extra node if sub_nodes was recently reset due to collision or initialization
                     if (sub_nodes.size() == 0)
                     {
@@ -459,7 +461,7 @@ namespace voronoi_path
                         std::vector<GraphNode> temp_bezier = bezierSubsection(sub_nodes);
                         bezier_path.insert(bezier_path.end(), temp_bezier.begin(), temp_bezier.end());
 
-                        if(sub_nodes.size() > 1)
+                        if (sub_nodes.size() > 1)
                             prev_2_nodes.insert(prev_2_nodes.begin(), sub_nodes.end() - 2, sub_nodes.end());
 
                         sub_nodes.clear();
@@ -480,7 +482,11 @@ namespace voronoi_path
             // path = all_path_nodes;
 
             if (print_timings)
+            {
+                std::cout << "Post process all paths: " << (std::chrono::system_clock::now() - p_process_start).count() / 1000000000.0 << "s\n";
                 std::cout << "Find all paths, including time to find nearest node: \t" << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << "s\n";
+                std::cout << "Number of shortest paths found by findShortestPath: " << shortest_path_call_count << "\n";
+            }
         }
 
         else
@@ -525,11 +531,11 @@ namespace voronoi_path
                 // ang = fabs(vectorAngle(start_end_vec, start_next_vec));
                 // if (ang < M_PI / 2.0)
                 // {
-                    if (!edgeCollides(start, curr))
-                    {
-                        min_start_dist = temp_start_dist;
-                        start_node = i;
-                    }
+                if (!edgeCollides(start, curr))
+                {
+                    min_start_dist = temp_start_dist;
+                    start_node = i;
+                }
                 // }
 
                 //TODO: Should consider reverse start here
@@ -604,15 +610,14 @@ namespace voronoi_path
             future_vector.emplace_back(std::async(
                 std::launch::async,
                 [&, start_pose, poses_per_thread, path](const std::vector<std::complex<double>> &centers,
-                                                                    const std::complex<double> &BL,
-                                                                    const std::complex<double> &TR) {
-
+                                                        const std::complex<double> &BL,
+                                                        const std::complex<double> &TR) {
                     std::complex<double> path_sum(0, 0);
                     for (int i = start_pose + 1; i < start_pose + poses_per_thread + 1; i++)
                     {
                         std::complex<double> edge_sum(0, 0);
 
-                        if(i >= path.size())
+                        if (i >= path.size())
                             continue;
 
                         //Each edge must iterate through all obstacles
@@ -676,10 +681,9 @@ namespace voronoi_path
 
         std::vector<std::vector<int>> adj_list_backup(adj_list);
         std::vector<int> adj_list_modified_ind;
-        int last_root_ind = 0;
 
         std::vector<std::vector<int>> potentialKth;
-        std::vector<double> cost_vec;
+        std::vector<std::pair<double, int>> cost_index_vec;
         std::vector<std::complex<double>> homotopy_classes;
 
         for (int k = 1; k <= num_paths; ++k)
@@ -688,24 +692,17 @@ namespace voronoi_path
             if (k - 1 == kthPaths.size())
                 break;
 
-            cost_vec.clear();
-            potentialKth.clear();
-
-            last_root_ind = 0;
-
             auto calc_homo_start = std::chrono::system_clock::now();
             //Update homotopy classes vector whenever new kth path gets added
-            homotopy_classes.emplace_back(calcHomotopyClass(kthPaths.back()));
+            homotopy_classes.push_back(std::move(calcHomotopyClass(kthPaths.back())));
             calc_homotopy_cum_time += (std::chrono::system_clock::now() - calc_homo_start).count() / 1000000000.0;
 
-            //Spur node is ith node
-            //Spur node is from start to 2nd last node of path, inclusive
+            //Spur node is ith node, from start to 2nd last node of path, inclusive
             for (int i = 0; i < kthPaths[k - 1].size() - 1; ++i)
             {
                 int spurNode = kthPaths[k - 1][i];
 
-                //Copy root path into container. Root path is path before spur node, containing the path from start onwards
-                //Root path size might be 0 if spurNode is the starting node
+                //Copy root path into container. Root path is path up until spur node, containing the path from start onwards
                 auto copy_root_time = std::chrono::system_clock::now();
                 std::vector<int> rootPath(i + 1);
                 std::copy(kthPaths[k - 1].begin(), kthPaths[k - 1].begin() + i + 1, rootPath.begin());
@@ -726,64 +723,59 @@ namespace voronoi_path
                     }
 
                     //Entire root path is identical
-                    if (equal_count == rootPath.size())
+                    if (equal_count == rootPath.size() && i + 1 < paths.size())
                     {
                         //Remove edge from spurNode to spur_next
-                        int spur_next = kthPaths[k - 1][i + 1];
+                        int spur_next = paths[i + 1];
                         auto erase_it = std::find(adj_list[spurNode].begin(), adj_list[spurNode].end(), spur_next);
 
-                        //Edge already removed
-                        if (erase_it == adj_list[spurNode].end())
-                            continue;
-
-                        adj_list[spurNode][erase_it - adj_list[spurNode].begin()] = -1;
-                        adj_list_modified_ind.push_back(spurNode);
+                        //Edge not removed yet
+                        if (erase_it != adj_list[spurNode].end())
+                        {
+                            adj_list[spurNode][erase_it - adj_list[spurNode].begin()] = -1;
+                            adj_list_modified_ind.push_back(spurNode);
+                        }
 
                         //Remove edge from spur_next to spurNode
                         erase_it = std::find(adj_list[spur_next].begin(), adj_list[spur_next].end(), spurNode);
 
-                        //Edge already removed
-                        if (erase_it == adj_list[spurNode].end())
-                            continue;
-
-                        adj_list[spur_next][erase_it - adj_list[spur_next].begin()] = -1;
-                        adj_list_modified_ind.push_back(spur_next);
-
-                        break;
+                        //Edge not removed yet
+                        if (erase_it != adj_list[spur_next].end())
+                        {
+                            adj_list[spur_next][erase_it - adj_list[spur_next].begin()] = -1;
+                            adj_list_modified_ind.push_back(spur_next);
+                        }
                     }
                 }
                 disconnect_edge_cum_time += (std::chrono::system_clock::now() - disconnect_edges_time).count() / 1000000000.0;
 
                 //Remove all nodes of root path from graph except spur node and start node
                 auto node_start_time = std::chrono::system_clock::now();
-                int node = 0;
-                for (int node_ind = last_root_ind; node_ind < rootPath.size(); ++node_ind)
+
+                //Exclude spurNode (rootPath.back())
+                for (int node_ind = 0; node_ind < rootPath.size() - 1; ++node_ind)
                 {
-                    node = rootPath[node_ind];
-                    if (node == spurNode || node == start_node)
-                        continue;
+                    int node = rootPath[node_ind];
 
                     for (int del_ind = 0; del_ind < adj_list[node].size(); ++del_ind)
                     {
                         //Remove connection from point-er side
                         int pointed_to = adj_list[node][del_ind];
 
-                        //Edge is already deleted
-                        if (pointed_to == -1)
-                            continue;
-
-                        adj_list[node][del_ind] = -1;
-                        adj_list_modified_ind.push_back(node);
-
-                        //Remove connection from point-ed side
-                        auto erase_it = std::find(adj_list[pointed_to].begin(), adj_list[pointed_to].end(), node);
-                        if (erase_it != adj_list[pointed_to].end())
+                        //Edge is not deleted
+                        if (pointed_to != -1)
                         {
-                            adj_list[pointed_to][erase_it - adj_list[pointed_to].begin()] = -1;
-                            adj_list_modified_ind.push_back(pointed_to);
-                        }
+                            adj_list[node][del_ind] = -1;
+                            adj_list_modified_ind.push_back(node);
 
-                        last_root_ind = node_ind;
+                            //Remove connection from point-ed side
+                            auto erase_it = std::find(adj_list[pointed_to].begin(), adj_list[pointed_to].end(), node);
+                            if (erase_it != adj_list[pointed_to].end())
+                            {
+                                adj_list[pointed_to][erase_it - adj_list[pointed_to].begin()] = -1;
+                                adj_list_modified_ind.push_back(pointed_to);
+                            }
+                        }
                     }
                 }
                 remove_nodes_cum_time += (std::chrono::system_clock::now() - node_start_time).count() / 1000000000.0;
@@ -807,6 +799,7 @@ namespace voronoi_path
                     //Check if the path just generated is unique in the potential k paths
                     bool path_is_unique = true;
 
+                    //Make sure to check all paths
                     int last = potentialKth.size();
                     if (kthPaths.size() > potentialKth.size())
                         last = kthPaths.size();
@@ -822,7 +815,7 @@ namespace voronoi_path
                             //Compare with kthPaths
                             if (check_path < kthPaths.size())
                             {
-                                if (node_pot < kthPaths[check_path].size() && node_pot < total_path.size())
+                                if (node_pot < kthPaths[check_path].size())
                                     if (kthPaths[check_path][node_pot] == total_path[node_pot])
                                         kth_equal++;
                             }
@@ -830,7 +823,7 @@ namespace voronoi_path
                             //Compare with potentialKths
                             if (check_path < potentialKth.size())
                             {
-                                if (node_pot < potentialKth[check_path].size() && node_pot < total_path.size())
+                                if (node_pot < potentialKth[check_path].size())
                                     if (potentialKth[check_path][node_pot] == total_path[node_pot])
                                         pot_equal++;
                             }
@@ -848,12 +841,10 @@ namespace voronoi_path
                         //Get cost of total path
                         double total_cost = 0;
                         for (int int_node = 0; int_node < total_path.size() - 1; ++int_node)
-                        {
                             total_cost += euclideanDist(node_inf[total_path[int_node]], node_inf[total_path[int_node + 1]]);
-                        }
 
-                        cost_vec.push_back(total_cost);
-                        potentialKth.push_back(total_path);
+                        cost_index_vec.push_back(std::make_pair(total_cost, potentialKth.size()));
+                        potentialKth.push_back(std::move(total_path));
                     }
                     get_total_cost_time += (std::chrono::system_clock::now() - get_total_start).count() / 1000000000.0;
                 }
@@ -873,40 +864,41 @@ namespace voronoi_path
             if (potentialKth.size() == 0)
                 break;
 
-            //Find minimum cost path
-            double min_cost = std::numeric_limits<double>::infinity();
-            int copy_index = -1;
-
-            //Find minimum kth path that is unique in homotopy class
             calc_homo_start = std::chrono::system_clock::now();
-            for (int min_ind = 0; min_ind < cost_vec.size(); ++min_ind)
+            std::sort(cost_index_vec.begin(), cost_index_vec.end());
+
+            auto it = cost_index_vec.begin();
+            while(it != cost_index_vec.end())
             {
-                if (cost_vec[min_ind] < min_cost)
+                std::complex<double> curr_h_class = calcHomotopyClass(potentialKth[it->second]);
+                int h = 0;
+
+                for (h = 0; h < homotopy_classes.size(); ++h)
                 {
-                    //Get the current potential path's homotopy class
-                    std::complex<double> curr_h_class = calcHomotopyClass(potentialKth[min_ind]);
-
-                    //Check that the path is in unique homotopy class compared to previous kthPaths
-                    //Iterate through all path's homotopy class
-                    for (int h = 0; h < homotopy_classes.size(); ++h)
+                    //Path is not unique
+                    if (std::abs(curr_h_class - homotopy_classes[h]) / std::abs(curr_h_class) <= h_class_threshold)
                     {
-                        if (std::abs(curr_h_class - homotopy_classes[h]) / std::abs(curr_h_class) <= h_class_threshold)
-                            break;
-
-                        //Checked through all previous paths' classes
-                        if (h == homotopy_classes.size() - 1)
-                        {
-                            min_cost = cost_vec[min_ind];
-                            copy_index = min_ind;
-                        }
+                        //Erase and then break if not unique
+                        it = cost_index_vec.erase(it);
+                        break;
                     }
                 }
+
+                //Path is unique
+                if(h == homotopy_classes.size())
+                    break;
             }
+
             calc_homotopy_cum_time += (std::chrono::system_clock::now() - calc_homo_start).count() / 1000000000.0;
 
             auto copy_kth = std::chrono::system_clock::now();
-            if (copy_index >= 0)
+            if(!cost_index_vec.empty())
+            {
+                int copy_index = cost_index_vec[0].second;
+
                 kthPaths.push_back(potentialKth[copy_index]);
+                cost_index_vec.erase(cost_index_vec.begin());
+            }
 
             copy_kth_cum_time += (std::chrono::system_clock::now() - copy_kth).count() / 1000000000.0;
         }
@@ -925,7 +917,7 @@ namespace voronoi_path
             std::cout << "Cum calc homotopy: " << calc_homotopy_cum_time << "\n";
             std::cout << "Cum check unique: " << check_uniqueness_cum_time << "\n";
         }
-
+// std::cout << "12"<< std::endl ;
         if (num_paths == all_paths.size() - 1)
             return true;
 
@@ -1071,6 +1063,7 @@ namespace voronoi_path
 
         //Path found
         path.insert(path.begin(), temp_path.rbegin(), temp_path.rend());
+        ++shortest_path_call_count;
 
         copy_path_time += (std::chrono::system_clock::now() - copy_path_start).count() / 1000000000.0;
         return true;
