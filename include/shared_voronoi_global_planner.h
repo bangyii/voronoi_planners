@@ -104,7 +104,7 @@ namespace shared_voronoi_global_planner
         double prev_local_dir = 0.0;
         double min_edge_length = 0.5;
         std::string joystick_topic = "/test_vel";
-        bool print_edges = false;
+        bool visualize_edges = false;
 
         std::vector<geometry_msgs::PoseStamped> prev_path;
         geometry_msgs::PoseStamped prev_goal;
@@ -121,6 +121,7 @@ namespace shared_voronoi_global_planner
         ros::Publisher global_path_pub;
         ros::Publisher all_paths_pub;
         ros::Publisher user_direction_pub;
+        ros::Publisher edges_viz_pub;
 
         ros::WallTimer voronoi_update_timer;
         ros::WallTimer map_update_timer;

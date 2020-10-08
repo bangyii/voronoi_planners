@@ -35,8 +35,68 @@ namespace shared_voronoi_global_planner
 
         voronoi_path.mapToGraph(map);
 
-        if(print_edges)
-            voronoi_path.printEdges();
+        //Publish visualization marker for use in rviz
+        if(visualize_edges)
+        {
+            std::vector<voronoi_path::GraphNode> nodes;
+            std::vector<voronoi_path::GraphNode> lonely_nodes;
+            voronoi_path.getEdges(nodes);
+            voronoi_path.getDisconnectedNodes(lonely_nodes);
+
+            visualization_msgs::MarkerArray marker_array;
+            visualization_msgs::Marker marker;
+            marker.header.stamp = ros::Time::now();
+            marker.header.frame_id = merged_costmap.header.frame_id;
+            marker.id = 0;
+            marker.type = 5;
+            marker.action = 0;
+            marker.scale.x = 0.01;
+            marker.color.a = 1.0;
+            marker.color.b = 1.0;
+            marker.lifetime = ros::Duration(0.0);
+            marker.pose.orientation.w = 1.0;
+            marker.points.reserve(nodes.size());
+
+            for(auto node : nodes)
+            {
+                geometry_msgs::Point temp_point;
+                temp_point.x = node.x * static_cast<double>(merged_costmap.info.resolution) + merged_costmap.info.origin.position.x;
+                temp_point.y = node.y * static_cast<double>(merged_costmap.info.resolution) + merged_costmap.info.origin.position.y;
+
+                // if(node.x > 0 && node.x < 0.01 && node.y > 0 && node.y < 0.01)
+                //     break;
+
+                marker.points.push_back(std::move(temp_point));
+            }
+
+            visualization_msgs::Marker marker_lonely;
+            marker_lonely.header.stamp = ros::Time::now();
+            marker_lonely.header.frame_id = merged_costmap.header.frame_id;
+            marker_lonely.id = 1;
+            marker_lonely.type = 8;
+            marker_lonely.action = 0;
+            marker_lonely.scale.x = 0.05;
+            marker_lonely.scale.y = 0.05;
+            marker_lonely.color.a = 1.0;
+            marker_lonely.color.r = 1.0;
+            marker_lonely.lifetime = ros::Duration(0.0);
+            marker_lonely.pose.orientation.w = 1.0;
+            marker_lonely.points.reserve(lonely_nodes.size());
+
+            for(auto node : lonely_nodes)
+            {
+                geometry_msgs::Point temp_point;
+                temp_point.x = node.x * static_cast<double>(merged_costmap.info.resolution) + merged_costmap.info.origin.position.x;
+                temp_point.y = node.y * static_cast<double>(merged_costmap.info.resolution) + merged_costmap.info.origin.position.y;
+
+                marker_lonely.points.push_back(std::move(temp_point));
+            }
+
+            marker_array.markers.push_back(marker);
+            marker_array.markers.push_back(marker_lonely);
+            // if(marker.points.size() == nodes.size())
+                edges_viz_pub.publish(marker_array);
+        }
     }
 
     void SharedVoronoiGlobalPlanner::updateVoronoiMapCB(const ros::WallTimerEvent &e)
@@ -78,7 +138,7 @@ namespace shared_voronoi_global_planner
             nh.getParam("user_dir_filter", user_dir_filter);
             nh.getParam("min_edge_length", min_edge_length);
             nh.getParam("joystick_topic", joystick_topic);
-            nh.getParam("print_edges", print_edges);
+            nh.getParam("visualize_edges", visualize_edges);
 
             voronoi_path.h_class_threshold = h_class_threshold;
             voronoi_path.print_timings = print_timings;
@@ -94,6 +154,7 @@ namespace shared_voronoi_global_planner
             global_path_pub = nh.advertise<nav_msgs::Path>("plan", 1);
             all_paths_pub = nh.advertise<visualization_msgs::MarkerArray>("all_paths", 1);
             user_direction_pub = nh.advertise<visualization_msgs::Marker>("user_direction", 1);
+            edges_viz_pub = nh.advertise<visualization_msgs::MarkerArray>("voronoi_edges", 1);
 
             if (publish_centroids)
                 centroid_pub = nh.advertise<visualization_msgs::MarkerArray>("centroids", 1);
@@ -280,7 +341,6 @@ namespace shared_voronoi_global_planner
 
         double x = curr_pose.pose.position.x;
         double y = curr_pose.pose.position.y;
-        // double theta = tf::getYaw(curr_pose.pose.orientation) + atan2(cmd_vel.angular.z, cmd_vel.linear.x);
 
         double new_local_dir = user_dir_filter * atan2(cmd_vel.angular.z, cmd_vel.linear.x) + (1 - user_dir_filter) * prev_local_dir;
         double theta = tf::getYaw(curr_pose.pose.orientation) + new_local_dir;
@@ -342,7 +402,6 @@ namespace shared_voronoi_global_planner
             }
         }
 
-        // std::cout << "Get matched path: " << (std::chrono::system_clock::now() - get_matched_start).count()/1000000000.0 << "\n";
         return std::min_element(ang_diff_sq.begin(), ang_diff_sq.end()) - ang_diff_sq.begin();
     }
 
