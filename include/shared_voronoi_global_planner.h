@@ -95,6 +95,8 @@ namespace shared_voronoi_global_planner
          **/
         double extra_point_distance = 1.0;
 
+        int node_connection_threshold_pix = 1;
+
         double forward_sim_time = 1.0;       //s
         double forward_sim_resolution = 0.1; //m
         double near_goal_threshold = 1.0;
@@ -102,7 +104,6 @@ namespace shared_voronoi_global_planner
         bool publish_all_path_markers = false;
         double user_dir_filter = 0.9;
         double prev_local_dir = 0.0;
-        double min_edge_length = 0.5;
         std::string joystick_topic = "/test_vel";
         bool visualize_edges = false;
 

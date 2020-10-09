@@ -63,8 +63,8 @@ namespace shared_voronoi_global_planner
                 temp_point.x = node.x * static_cast<double>(merged_costmap.info.resolution) + merged_costmap.info.origin.position.x;
                 temp_point.y = node.y * static_cast<double>(merged_costmap.info.resolution) + merged_costmap.info.origin.position.y;
 
-                // if(node.x > 0 && node.x < 0.01 && node.y > 0 && node.y < 0.01)
-                //     break;
+                if(node.x > 0 && node.x < 0.01 && node.y > 0 && node.y < 0.01)
+                    break;
 
                 marker.points.push_back(std::move(temp_point));
             }
@@ -75,8 +75,8 @@ namespace shared_voronoi_global_planner
             marker_lonely.id = 1;
             marker_lonely.type = 8;
             marker_lonely.action = 0;
-            marker_lonely.scale.x = 0.05;
-            marker_lonely.scale.y = 0.05;
+            marker_lonely.scale.x = 0.1;
+            marker_lonely.scale.y = 0.1;
             marker_lonely.color.a = 1.0;
             marker_lonely.color.r = 1.0;
             marker_lonely.lifetime = ros::Duration(0.0);
@@ -124,7 +124,6 @@ namespace shared_voronoi_global_planner
             nh.getParam("update_voronoi_rate", update_voronoi_rate);
             nh.getParam("update_costmap_rate", update_costmap_rate);
             nh.getParam("print_timings", print_timings);
-            nh.getParam("hash_length", hash_length);
             nh.getParam("line_check_resolution", line_check_resolution);
             nh.getParam("pixels_to_skip", pixels_to_skip);
             nh.getParam("open_cv_scale", open_cv_scale);
@@ -136,13 +135,15 @@ namespace shared_voronoi_global_planner
             nh.getParam("num_paths", num_paths);
             nh.getParam("publish_all_path_markers", publish_all_path_markers);
             nh.getParam("user_dir_filter", user_dir_filter);
-            nh.getParam("min_edge_length", min_edge_length);
             nh.getParam("joystick_topic", joystick_topic);
             nh.getParam("visualize_edges", visualize_edges);
+            nh.getParam("node_connection_threshold_pix", node_connection_threshold_pix);
 
             voronoi_path.h_class_threshold = h_class_threshold;
             voronoi_path.print_timings = print_timings;
-            voronoi_path.min_edge_length = min_edge_length;
+            voronoi_path.node_connection_threshold_pix = node_connection_threshold_pix;
+            voronoi_path.extra_point_distance = extra_point_distance;
+            voronoi_path.min_node_sep_sq = min_node_sep_sq;
 
             //Subscribe and advertise related topics
             global_costmap_sub = nh.subscribe("/move_base/global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);
@@ -177,16 +178,6 @@ namespace shared_voronoi_global_planner
                                             (start.pose.position.y - merged_costmap.info.origin.position.y) / merged_costmap.info.resolution);
         voronoi_path::GraphNode end_point((goal.pose.position.x - merged_costmap.info.origin.position.x) / merged_costmap.info.resolution,
                                           (goal.pose.position.y - merged_costmap.info.origin.position.y) / merged_costmap.info.resolution);
-
-        ros::Rate r(5);
-        while (true)
-        {
-            if (!voronoi_path.isUpdatingVoronoi())
-                break;
-
-            ROS_DEBUG("Voronoi diagram is updating, waiting for it to complete before requesting for plan");
-            r.sleep();
-        }
 
         //Reset previous path if goal has changed
         if (prev_goal.header.frame_id.empty())
