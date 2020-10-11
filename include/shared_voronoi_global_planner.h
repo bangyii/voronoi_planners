@@ -43,11 +43,7 @@ namespace shared_voronoi_global_planner
         double update_costmap_rate = 0.3;
         bool print_timings = true;
         bool publish_centroids = false;
-
-        /**
-         * Number of digits to allow before decimal point. Number of digits should be greater than map size in pixels
-         **/
-        int hash_length = 6;
+        int node_connection_threshold_pix = 1;
 
         /**
          * Pixel resolution to increment when checking if an edge collision occurs. Value of 0.1 means the edge will
@@ -95,7 +91,6 @@ namespace shared_voronoi_global_planner
          **/
         double extra_point_distance = 1.0;
 
-        int node_connection_threshold_pix = 1;
 
         double forward_sim_time = 1.0;       //s
         double forward_sim_resolution = 0.1; //m
