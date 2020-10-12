@@ -138,6 +138,7 @@ namespace shared_voronoi_global_planner
             nh.getParam("joystick_topic", joystick_topic);
             nh.getParam("visualize_edges", visualize_edges);
             nh.getParam("node_connection_threshold_pix", node_connection_threshold_pix);
+            nh.getParam("collision_threshold", collision_threshold);
 
             voronoi_path.h_class_threshold = h_class_threshold;
             voronoi_path.print_timings = print_timings;

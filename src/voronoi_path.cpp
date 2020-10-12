@@ -66,23 +66,18 @@ namespace voronoi_path
             double a = (centers.size() - 1) / 2.0;
             double b = a;
             obs_coeff.clear();
-            obs_coeff.reserve(centers.size());
-            std::complex<double> al_denom_prod(1, 1);
-            for (int i = 0; i < centers.size(); ++i)
+            obs_coeff.resize(centers.size());
+
+            std::complex<double> from_begin(1,1);
+            std::complex<double> from_end(1,1);
+            // std::complex<double> al_denom_prod(1, 1);
+            for(int i = 0; i < centers.size(); ++i)
             {
-                auto obs = centers[i];
-                if (i == 0)
-                {
-                    for (int j = 1; j < centers.size(); ++j)
-                        al_denom_prod *= (obs - centers[j]);
-                }
+                obs_coeff[i] *= from_begin;
+                from_begin *= centers[i];
 
-                else
-                    al_denom_prod = al_denom_prod * centers[i - 1] / centers[i];
-
-                std::complex<double> fNaught = std::pow((obs - BL), a) + std::pow((obs - TR), b);
-
-                obs_coeff.emplace_back(std::move(fNaught / al_denom_prod));
+                obs_coeff[centers.size() - i - 1] *= from_end;
+                from_end *= centers[centers.size() - i - 1];
             }
 
             if (print_timings)
