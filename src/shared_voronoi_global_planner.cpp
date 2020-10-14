@@ -241,6 +241,7 @@ namespace shared_voronoi_global_planner
                     new_pose.pose.position.y = all_paths[i][j].y * merged_costmap.info.resolution + merged_costmap.info.origin.position.y;
                     new_pose.pose.position.z = 0;
 
+                    //TODO: Set orientation of intermediate poses
                     new_pose.pose.orientation.w = 1;
 
                     all_paths_meters[i].push_back(new_pose);
