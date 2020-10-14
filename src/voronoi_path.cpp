@@ -5,6 +5,7 @@
 #include <future>
 #include <thread>
 #include <functional>
+#include <cmath>
 
 namespace voronoi_path
 {
@@ -54,7 +55,7 @@ namespace voronoi_path
             auto it = centers.begin();
             while (it != centers.end())
             {
-                if (isnan(it->real()) || isnan(it->imag()))
+                if (std::isnan(it->real()) || std::isnan(it->imag()))
                 {
                     it = centers.erase(it);
                     continue;
