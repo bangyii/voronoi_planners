@@ -192,21 +192,21 @@ namespace shared_voronoi_global_planner
         voronoi_path::GraphNode end_point((goal.pose.position.x - map.origin.position.x) / map.resolution,
                                           (goal.pose.position.y - map.origin.position.y) / map.resolution);
 
-        //Reset previous path if goal has changed
-        if (prev_goal.header.frame_id.empty())
-            prev_goal = goal;
+        // //Reset previous path if goal has changed
+        // if (prev_goal.header.frame_id.empty())
+        //     prev_goal = goal;
 
-        else
-        {
-            //If goal has changed
-            if (prev_goal.pose.position.x != goal.pose.position.x ||
-                prev_goal.pose.position.y != goal.pose.position.y ||
-                prev_goal.pose.position.z != goal.pose.position.z)
-            {
-                prev_goal = goal;
-                prev_path.clear();
-            }
-        }
+        // else
+        // {
+        //     //If goal has changed
+        //     if (prev_goal.pose.position.x != goal.pose.position.x ||
+        //         prev_goal.pose.position.y != goal.pose.position.y ||
+        //         prev_goal.pose.position.z != goal.pose.position.z)
+        //     {
+        //         prev_goal = goal;
+        //         // prev_path.clear();
+        //     }
+        // }
 
         //Get voronoi paths
         std::vector<std::vector<voronoi_path::GraphNode>> all_paths = voronoi_path.getPath(start_point, end_point, num_paths);
@@ -277,20 +277,20 @@ namespace shared_voronoi_global_planner
             if (publish_all_path_markers)
                 all_paths_pub.publish(marker_array);
 
-            //Prune previous selected path
-            while (!prev_path.empty())
-            {
-                double dist = sqrt(pow(prev_path[0].pose.position.x - start.pose.position.x, 2) + pow(prev_path[0].pose.position.y - start.pose.position.y, 2));
-                if (dist < 0.3)
-                    prev_path.erase(prev_path.begin());
+            // //Prune previous selected path
+            // while (!prev_path.empty())
+            // {
+            //     double dist = sqrt(pow(prev_path[0].pose.position.x - start.pose.position.x, 2) + pow(prev_path[0].pose.position.y - start.pose.position.y, 2));
+            //     if (dist < 0.3)
+            //         prev_path.erase(prev_path.begin());
 
-                else
-                    break;
-            }
+            //     else
+            //         break;
+            // }
 
-            //Add previously selected path into selections
-            if(!prev_path.empty())
-                all_paths_meters.push_back(prev_path);
+            // //Add previously selected path into selections
+            // if(!prev_path.empty())
+            //     all_paths_meters.push_back(prev_path);
 
             //Select the path most similar to user commanded velocity path
             int preferred_path = 0;
@@ -302,7 +302,7 @@ namespace shared_voronoi_global_planner
             if (!all_paths_meters[preferred_path].empty())
             {
                 plan = all_paths_meters[preferred_path];
-                prev_path = plan;
+                // prev_path = plan;
             }
 
             //Publish selected plan for visualization
