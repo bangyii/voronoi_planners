@@ -20,11 +20,11 @@ namespace voronoi_path
 
     std::vector<std::complex<double>> voronoi_path::findObstacleCentroids()
     {
-        if (map.data.size() != 0)
+        if (map_ptr->data.size() != 0)
         {
             auto copy_time = std::chrono::system_clock::now();
 
-            cv::Mat cv_map = cv::Mat(map.data).reshape(0, map.height);
+            cv::Mat cv_map = cv::Mat(map_ptr->data).reshape(0, map_ptr->height);
             cv_map.convertTo(cv_map, CV_8UC1);
 
             //Downscale to increase contour finding speed
@@ -48,7 +48,7 @@ namespace voronoi_path
             for (int i = 0; i < contours.size(); ++i)
             {
                 mu[i] = moments(contours[i], false);
-                centers[i] = std::complex<double>(map.width - mu[i].m01 / mu[i].m00 / open_cv_scale, map.height - mu[i].m10 / mu[i].m00 / open_cv_scale);
+                centers[i] = std::complex<double>(map_ptr->width - mu[i].m01 / mu[i].m00 / open_cv_scale, map_ptr->height - mu[i].m10 / mu[i].m00 / open_cv_scale);
             }
 
             //Delete NaN centroids
@@ -94,11 +94,11 @@ namespace voronoi_path
         for (int i = start_index; i < start_index + num_pixels; i += (pixels_to_skip + 1))
         {
             //Occupied
-            if (map.data[i] >= occupancy_threshold)
+            if (map_ptr->data[i] >= occupancy_threshold)
             {
                 jcv_point temp_point;
-                temp_point.x = i % map.width;
-                temp_point.y = static_cast<int>(i / map.width);
+                temp_point.x = i % map_ptr->width;
+                temp_point.y = static_cast<int>(i / map_ptr->width);
 
                 points_vec.push_back(temp_point);
             }
@@ -107,9 +107,12 @@ namespace voronoi_path
         return points_vec;
     }
 
-    bool voronoi_path::mapToGraph(const Map &map_)
+    bool voronoi_path::mapToGraph(Map* map_ptr_)
+    // bool voronoi_path::mapToGraph(const Map &map_)
     {
         auto start_time = std::chrono::system_clock::now();
+
+        map_ptr = map_ptr_;
 
         //Lock mutex to ensure adj_list is not being used        
         auto lock_start = std::chrono::system_clock::now();
@@ -118,17 +121,16 @@ namespace voronoi_path
         if(print_timings)
             std::cout << "Map to graph lock duration: " << (std::chrono::system_clock::now() - lock_start).count()/1000000000.0 << "\n";
 
-        //Reset all variables
-        map = map_;
 
-        int size = map.data.size();
+        int size = map_ptr->data.size();
         if (size == 0)
             return false;
 
         //Set bottom left and top right for use during homotopy check
         BL = std::complex<double>(0, 0);
-        TR = std::complex<double>(map.width - 1, map.height - 1);
+        TR = std::complex<double>(map_ptr->width - 1, map_ptr->height - 1);
 
+        //Reset all variables
         edge_vector.clear();
         adj_list.clear();
         node_inf.clear();
@@ -193,9 +195,8 @@ namespace voronoi_path
         }
 
         for (int i = 0; i < occupied_points; ++i)
-        {
             points[i] = points_vec[i];
-        }
+
         if (print_timings)
             std::cout << "Loop map points: \t" << (std::chrono::system_clock::now() - loop_map_points).count() / 1000000000.0 << "s\n";
 
@@ -203,8 +204,8 @@ namespace voronoi_path
         jcv_rect rect;
         rect.min.x = 0;
         rect.min.y = 0;
-        rect.max.x = map.width - 1;
-        rect.max.y = map.height - 1;
+        rect.max.x = map_ptr->width - 1;
+        rect.max.y = map_ptr->height - 1;
 
         auto diagram_time = std::chrono::system_clock::now();
         jcv_diagram diagram;
@@ -217,12 +218,10 @@ namespace voronoi_path
         const jcv_edge *edges = jcv_diagram_get_edges(&diagram);
         while (edges)
         {
-            edge_vector.push_back(*edges);
+            edge_vector.push_back(edges);
             edges = jcv_diagram_get_next_edge(edges);
         }
 
-        jcv_diagram_free(&diagram);
-        free(points);
         if (print_timings)
             std::cout << "Generating edges: \t " << (std::chrono::system_clock::now() - diagram_time).count() / 1000000000.0 << "s\n";
 
@@ -243,7 +242,7 @@ namespace voronoi_path
         for (int i = 0; i < edge_vector.size(); ++i)
         {
             //Get hash for both vertices of the current edge
-            std::vector<uint32_t> hash_vec = {hash(edge_vector[i].pos[0].x, edge_vector[i].pos[0].y), hash(edge_vector[i].pos[1].x, edge_vector[i].pos[1].y)};
+            std::vector<uint32_t> hash_vec = {hash(edge_vector[i]->pos[0].x, edge_vector[i]->pos[0].y), hash(edge_vector[i]->pos[1].x, edge_vector[i]->pos[1].y)};
             int node_index[2] = {-1, -1};
 
             //Check if each node is already in the map
@@ -259,7 +258,7 @@ namespace voronoi_path
                 {
                     //Add new node to adjacency list & info vector, and respective hash and node index to map
                     node_index[j] = adj_list.size();
-                    node_inf.emplace_back(edge_vector[i].pos[j].x, edge_vector[i].pos[j].y);
+                    node_inf.emplace_back(edge_vector[i]->pos[j].x, edge_vector[i]->pos[j].y);
                     adj_list.push_back(std::vector<int>());
                     hash_index_map.insert(std::pair<uint32_t, int>(hash_vec[j], node_index[j]));
                 }
@@ -307,6 +306,9 @@ namespace voronoi_path
         findObstacleCentroids();
 
         num_nodes = adj_list.size();
+
+        jcv_diagram_free(&diagram);
+        free(points);
         return true;
     }
 
@@ -314,6 +316,15 @@ namespace voronoi_path
     {
         std::lock_guard<std::mutex> lock(voronoi_mtx);
         return adj_list;
+    }
+
+    bool voronoi_path::getObstacleCentroids(std::vector<GraphNode> &centroids)
+    {
+        centroids.reserve(centers.size());
+        for(const auto &elem : centers)
+            centroids.emplace_back(elem.real(), elem.imag());
+
+        return true;
     }
 
     bool voronoi_path::getEdges(std::vector<GraphNode> &edges)
@@ -450,7 +461,7 @@ namespace voronoi_path
                             dir.setUnitVector();
 
                             //Extra point is collinear with prev[0] and prev[1], but further along than p[1]
-                            sub_nodes.push_back(prev_2_nodes[1] + dir * extra_point_distance * map.resolution);
+                            sub_nodes.push_back(prev_2_nodes[1] + dir * extra_point_distance * map_ptr->resolution);
 
                             //Do not insert if collision occurs when extra point is added
                             if (edgeCollides(sub_nodes[sub_nodes.size() - 2], sub_nodes.back()))
@@ -1077,10 +1088,10 @@ namespace voronoi_path
             //Check each vertex if is inside obstacle
             for (int j = 0; j < 2; ++j)
             {
-                int pixel = floor(edge_vector[i].pos[j].x) + floor(edge_vector[i].pos[j].y) * map.width;
+                int pixel = floor(edge_vector[i]->pos[j].x) + floor(edge_vector[i]->pos[j].y) * map_ptr->width;
 
                 //If vertex pixel in map is not free, remove this edge
-                if (map.data[pixel] > collision_threshold)
+                if (map_ptr->data[pixel] > collision_threshold)
                 {
                     delete_indices.push_back(i);
                     break;
@@ -1090,7 +1101,7 @@ namespace voronoi_path
 
         if (delete_indices.size() != 0)
         {
-            std::vector<jcv_edge> remaining_edges;
+            std::vector<const jcv_edge*> remaining_edges;
             int delete_count = 0;
             for (int i = 0; i < edge_vector.size(); ++i)
             {
@@ -1133,10 +1144,10 @@ namespace voronoi_path
         std::vector<int> delete_indices;
         for (int i = 0; i < edge_vector.size(); ++i)
         {
-            jcv_edge curr_edge = edge_vector[i];
+            const jcv_edge* curr_edge = edge_vector[i];
 
-            GraphNode start(curr_edge.pos[0].x, curr_edge.pos[0].y);
-            GraphNode end(curr_edge.pos[1].x, curr_edge.pos[1].y);
+            GraphNode start(curr_edge->pos[0].x, curr_edge->pos[0].y);
+            GraphNode end(curr_edge->pos[1].x, curr_edge->pos[1].y);
 
             if (edgeCollides(start, end))
                 delete_indices.push_back(i);
@@ -1144,7 +1155,7 @@ namespace voronoi_path
 
         if (delete_indices.size() != 0)
         {
-            std::vector<jcv_edge> remaining_edges;
+            std::vector<const jcv_edge*> remaining_edges;
             int delete_count = 0;
             for (int i = 0; i < edge_vector.size(); ++i)
             {
@@ -1192,8 +1203,8 @@ namespace voronoi_path
             curr_x = (1.0 - curr_step) * start.x + curr_step * end.x;
             curr_y = (1.0 - curr_step) * start.y + curr_step * end.y;
 
-            pixel = int(curr_x) + int(curr_y) * map.width;
-            if (map.data[pixel] > collision_threshold)
+            pixel = int(curr_x) + int(curr_y) * map_ptr->width;
+            if (map_ptr->data[pixel] > collision_threshold)
             {
                 return true;
             }
@@ -1248,7 +1259,7 @@ namespace voronoi_path
         auto it = points.begin() + 1;
         double curr_x = -1;
         double curr_y = -1;
-        double pixel_threshold = min_node_sep_sq * map.resolution;
+        double pixel_threshold = min_node_sep_sq * map_ptr->resolution;
         while (it < points.end())
         {
             if (curr_x < 0 && curr_y < 0)

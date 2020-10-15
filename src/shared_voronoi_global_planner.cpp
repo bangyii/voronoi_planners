@@ -1,8 +1,8 @@
 #include "shared_voronoi_global_planner.h"
 #include <pluginlib/class_list_macros.h>
 #include <nav_msgs/Path.h>
-#include <thread>
-#include <future>
+// #include <thread>
+// #include <future>
 #include <tf/transform_datatypes.h>
 #include <algorithm>
 #include <limits>
@@ -33,7 +33,10 @@ namespace shared_voronoi_global_planner
             return;
         }
 
-        voronoi_path.mapToGraph(map);
+        voronoi_path.mapToGraph(&map);
+
+        std::vector<voronoi_path::GraphNode> centers;
+        voronoi_path.getObstacleCentroids(centers);
 
         //Publish visualization marker for use in rviz
         if(visualize_edges)
@@ -43,11 +46,13 @@ namespace shared_voronoi_global_planner
             voronoi_path.getEdges(nodes);
             voronoi_path.getDisconnectedNodes(lonely_nodes);
 
+            //Markers for voronoi edges
             visualization_msgs::MarkerArray marker_array;
             visualization_msgs::Marker marker;
             marker.header.stamp = ros::Time::now();
-            marker.header.frame_id = merged_costmap.header.frame_id;
+            marker.header.frame_id = map.frame_id;
             marker.id = 0;
+            marker.ns = "Voronoi Edges";
             marker.type = 5;
             marker.action = 0;
             marker.scale.x = 0.01;
@@ -57,11 +62,11 @@ namespace shared_voronoi_global_planner
             marker.pose.orientation.w = 1.0;
             marker.points.reserve(nodes.size());
 
-            for(auto node : nodes)
+            for(const auto& node : nodes)
             {
                 geometry_msgs::Point temp_point;
-                temp_point.x = node.x * static_cast<double>(merged_costmap.info.resolution) + merged_costmap.info.origin.position.x;
-                temp_point.y = node.y * static_cast<double>(merged_costmap.info.resolution) + merged_costmap.info.origin.position.y;
+                temp_point.x = node.x * static_cast<double>(map.resolution) + map.origin.position.x;
+                temp_point.y = node.y * static_cast<double>(map.resolution) + map.origin.position.y;
 
                 if(node.x > 0 && node.x < 0.01 && node.y > 0 && node.y < 0.01)
                     break;
@@ -69,10 +74,12 @@ namespace shared_voronoi_global_planner
                 marker.points.push_back(std::move(temp_point));
             }
 
+            //Markers for voronoi nodes that are only connected on one side
             visualization_msgs::Marker marker_lonely;
             marker_lonely.header.stamp = ros::Time::now();
-            marker_lonely.header.frame_id = merged_costmap.header.frame_id;
+            marker_lonely.header.frame_id = map.frame_id;
             marker_lonely.id = 1;
+            marker_lonely.ns = "Lonely Nodes";
             marker_lonely.type = 8;
             marker_lonely.action = 0;
             marker_lonely.scale.x = 0.1;
@@ -83,36 +90,45 @@ namespace shared_voronoi_global_planner
             marker_lonely.pose.orientation.w = 1.0;
             marker_lonely.points.reserve(lonely_nodes.size());
 
-            for(auto node : lonely_nodes)
+            for(const auto& node : lonely_nodes)
             {
                 geometry_msgs::Point temp_point;
-                temp_point.x = node.x * static_cast<double>(merged_costmap.info.resolution) + merged_costmap.info.origin.position.x;
-                temp_point.y = node.y * static_cast<double>(merged_costmap.info.resolution) + merged_costmap.info.origin.position.y;
+                temp_point.x = node.x * static_cast<double>(map.resolution) + map.origin.position.x;
+                temp_point.y = node.y * static_cast<double>(map.resolution) + map.origin.position.y;
 
                 marker_lonely.points.push_back(std::move(temp_point));
             }
 
-            marker_array.markers.push_back(marker);
-            marker_array.markers.push_back(marker_lonely);
-            // if(marker.points.size() == nodes.size())
-                edges_viz_pub.publish(marker_array);
+            //Markers for centroids of obstacles
+            visualization_msgs::Marker marker_obstacles;
+            marker_obstacles.header.stamp = ros::Time::now();
+            marker_obstacles.header.frame_id = map.frame_id;
+            marker_obstacles.id = 2;
+            marker_obstacles.ns = "Obstacle Centroids";
+            marker_obstacles.type = 8;
+            marker_obstacles.action = 0;
+            marker_obstacles.scale.x = 0.2;
+            marker_obstacles.scale.y = 0.2;
+            marker_obstacles.color.a = 1.0;
+            marker_obstacles.color.g = 1.0;
+            marker_obstacles.lifetime = ros::Duration(0.0);
+            marker_obstacles.pose.orientation.w = 1.0;
+            marker_obstacles.points.reserve(centers.size());
+
+            for(const auto& center : centers)
+            {
+                geometry_msgs::Point temp_point;
+                temp_point.x = center.x * static_cast<double>(map.resolution) + map.origin.position.x;
+                temp_point.y = center.y * static_cast<double>(map.resolution) + map.origin.position.y;
+
+                marker_obstacles.points.push_back(std::move(temp_point));
+            }
+
+            marker_array.markers.push_back(std::move(marker_obstacles));
+            marker_array.markers.push_back(std::move(marker));
+            marker_array.markers.push_back(std::move(marker_lonely));
+            edges_viz_pub.publish(marker_array);
         }
-    }
-
-    void SharedVoronoiGlobalPlanner::updateVoronoiMapCB(const ros::WallTimerEvent &e)
-    {
-        auto update_start = std::chrono::system_clock::now();
-        map.height = merged_costmap.info.height;
-        map.width = merged_costmap.info.width;
-        map.frame_id = merged_costmap.header.frame_id;
-        map.resolution = merged_costmap.info.resolution;
-        map.origin.position.x = merged_costmap.info.origin.position.x;
-        map.origin.position.y = merged_costmap.info.origin.position.y;
-
-        map.data.clear();
-        map.data.insert(map.data.begin(), merged_costmap.data.begin(), merged_costmap.data.end());
-        threadedMapCleanup();
-        // std::cout << "Update voronoi map: " << (std::chrono::system_clock::now() - update_start).count()/1000000000.0 << "\n";
     }
 
     void SharedVoronoiGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS *costmap_ros)
@@ -122,7 +138,6 @@ namespace shared_voronoi_global_planner
             //Read parameters
             nh.getParam("occupancy_threshold", occupancy_threshold);
             nh.getParam("update_voronoi_rate", update_voronoi_rate);
-            nh.getParam("update_costmap_rate", update_costmap_rate);
             nh.getParam("print_timings", print_timings);
             nh.getParam("line_check_resolution", line_check_resolution);
             nh.getParam("pixels_to_skip", pixels_to_skip);
@@ -139,6 +154,8 @@ namespace shared_voronoi_global_planner
             nh.getParam("visualize_edges", visualize_edges);
             nh.getParam("node_connection_threshold_pix", node_connection_threshold_pix);
             nh.getParam("collision_threshold", collision_threshold);
+            nh.getParam("joy_max_lin", joy_max_lin);            
+            nh.getParam("joy_max_ang", joy_max_ang);
 
             voronoi_path.h_class_threshold = h_class_threshold;
             voronoi_path.print_timings = print_timings;
@@ -152,18 +169,13 @@ namespace shared_voronoi_global_planner
             local_costmap_sub = nh.subscribe("/move_base/local_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::localCostmapCB, this);
             user_vel_sub = nh.subscribe("/test_vel", 1, &SharedVoronoiGlobalPlanner::cmdVelCB, this);
 
-            merged_costmap_pub = nh.advertise<nav_msgs::OccupancyGrid>("merged_costmap", 1);
             global_path_pub = nh.advertise<nav_msgs::Path>("plan", 1);
             all_paths_pub = nh.advertise<visualization_msgs::MarkerArray>("all_paths", 1);
             user_direction_pub = nh.advertise<visualization_msgs::Marker>("user_direction", 1);
             edges_viz_pub = nh.advertise<visualization_msgs::MarkerArray>("voronoi_edges", 1);
 
-            if (publish_centroids)
-                centroid_pub = nh.advertise<visualization_msgs::MarkerArray>("centroids", 1);
-
             //Create timer to update Voronoi diagram
             voronoi_update_timer = nh.createWallTimer(ros::WallDuration(1.0 / update_voronoi_rate), &SharedVoronoiGlobalPlanner::updateVoronoiCB, this);
-            map_update_timer = nh.createWallTimer(ros::WallDuration(1.0 / update_costmap_rate), &SharedVoronoiGlobalPlanner::updateVoronoiMapCB, this);
 
             ROS_INFO("Shared Voronoi Global Planner initialized");
         }
@@ -175,10 +187,10 @@ namespace shared_voronoi_global_planner
     bool SharedVoronoiGlobalPlanner::makePlan(const geometry_msgs::PoseStamped &start, const geometry_msgs::PoseStamped &goal, std::vector<geometry_msgs::PoseStamped> &plan)
     {
         //Get start and end points in terms of global costmap pixels
-        voronoi_path::GraphNode start_point((start.pose.position.x - merged_costmap.info.origin.position.x) / merged_costmap.info.resolution,
-                                            (start.pose.position.y - merged_costmap.info.origin.position.y) / merged_costmap.info.resolution);
-        voronoi_path::GraphNode end_point((goal.pose.position.x - merged_costmap.info.origin.position.x) / merged_costmap.info.resolution,
-                                          (goal.pose.position.y - merged_costmap.info.origin.position.y) / merged_costmap.info.resolution);
+        voronoi_path::GraphNode start_point((start.pose.position.x - map.origin.position.x) / map.resolution,
+                                            (start.pose.position.y - map.origin.position.y) / map.resolution);
+        voronoi_path::GraphNode end_point((goal.pose.position.x - map.origin.position.x) / map.resolution,
+                                          (goal.pose.position.y - map.origin.position.y) / map.resolution);
 
         //Reset previous path if goal has changed
         if (prev_goal.header.frame_id.empty())
@@ -211,7 +223,7 @@ namespace shared_voronoi_global_planner
             //Convert node numbers to position on map for path
             std_msgs::Header header;
             header.stamp = ros::Time::now();
-            header.frame_id = merged_costmap.header.frame_id;
+            header.frame_id = map.frame_id;
             for (int i = 0; i < all_paths.size(); ++i)
             {
                 visualization_msgs::Marker marker;
@@ -237,8 +249,8 @@ namespace shared_voronoi_global_planner
                 {
                     geometry_msgs::PoseStamped new_pose;
                     new_pose.header = header;
-                    new_pose.pose.position.x = all_paths[i][j].x * merged_costmap.info.resolution + merged_costmap.info.origin.position.x;
-                    new_pose.pose.position.y = all_paths[i][j].y * merged_costmap.info.resolution + merged_costmap.info.origin.position.y;
+                    new_pose.pose.position.x = all_paths[i][j].x * map.resolution + map.origin.position.x;
+                    new_pose.pose.position.y = all_paths[i][j].y * map.resolution + map.origin.position.y;
                     new_pose.pose.position.z = 0;
 
                     //TODO: Set orientation of intermediate poses
@@ -296,7 +308,7 @@ namespace shared_voronoi_global_planner
             //Publish selected plan for visualization
             nav_msgs::Path viz_path;
             viz_path.header.stamp = ros::Time::now();
-            viz_path.header.frame_id = merged_costmap.header.frame_id;
+            viz_path.header.frame_id = map.frame_id;
             viz_path.poses = all_paths_meters[preferred_path];
             global_path_pub.publish(viz_path);
 
@@ -321,7 +333,7 @@ namespace shared_voronoi_global_planner
         //Create marker item to store a line
         visualization_msgs::Marker marker;
         marker.header.stamp = ros::Time::now();
-        marker.header.frame_id = merged_costmap.header.frame_id;
+        marker.header.frame_id = map.frame_id;
         marker.ns = "User direction";
         marker.id = 0;
         marker.type = 4;
@@ -335,7 +347,17 @@ namespace shared_voronoi_global_planner
         double x = curr_pose.pose.position.x;
         double y = curr_pose.pose.position.y;
 
-        double new_local_dir = user_dir_filter * atan2(cmd_vel.angular.z, cmd_vel.linear.x) + (1 - user_dir_filter) * prev_local_dir;
+        //Normalize the cmd angular velocity to get accurate joystick direction
+        double normalized_ang = cmd_vel.angular.z / joy_max_ang;
+        if(normalized_ang > 1)
+            normalized_ang = 1;
+
+        //Normalize the cmd linear velocity to get accurate joystick direction
+        double normalized_lin = cmd_vel.linear.x / joy_max_lin;
+        if(normalized_lin > 1)
+            normalized_lin = 1;
+
+        double new_local_dir = user_dir_filter * atan2(normalized_ang, normalized_lin) + (1 - user_dir_filter) * prev_local_dir;
         double theta = tf::getYaw(curr_pose.pose.orientation) + new_local_dir;
         prev_local_dir = new_local_dir;
 
@@ -414,13 +436,13 @@ namespace shared_voronoi_global_planner
         if (!local_costmap.data.empty())
         {
             //Get origin of local_costmap wrt to origin of global_costmap
-            double rel_local_x = -merged_costmap.info.origin.position.x + local_costmap.info.origin.position.x;
-            double rel_local_y = -merged_costmap.info.origin.position.y + local_costmap.info.origin.position.y;
+            double rel_local_x = -map.origin.position.x + local_costmap.info.origin.position.x;
+            double rel_local_y = -map.origin.position.y + local_costmap.info.origin.position.y;
 
             //Costmap is rotated ccw 90deg in rviz
             //Convert distance to pixels in global costmap resolution
-            int x_pixel_offset = rel_local_x / merged_costmap.info.resolution;
-            int y_pixel_offset = rel_local_y / merged_costmap.info.resolution;
+            int x_pixel_offset = rel_local_x / map.resolution;
+            int y_pixel_offset = rel_local_y / map.resolution;
 
             std::vector<voronoi_path::GraphNode> local_vertices;
             local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset, y_pixel_offset));
@@ -431,13 +453,13 @@ namespace shared_voronoi_global_planner
             if (add_local_costmap_corners)
                 voronoi_path.setLocalVertices(local_vertices);
 
-            //Restore modified global costmap pixels to old value in previous loop
+            //Restore modified global costmap pixels to old value in previous loop, in cases when local obstacle is moving
             for (int i = 0; i < map_pixels_backup.size(); ++i)
-            {
-                merged_costmap.data[map_pixels_backup[i].first] = map_pixels_backup[i].second;
-            }
+                map.data[map_pixels_backup[i].first] = map_pixels_backup[i].second;
+
             map_pixels_backup.clear();
 
+            //Copy data to internal map storage from local costmap if the pixel surpasses an occupancy threshold
             for (int i = 0; i < local_costmap.data.size(); ++i)
             {
                 int local_data = local_costmap.data[i];
@@ -446,90 +468,41 @@ namespace shared_voronoi_global_planner
                 {
                     int global_curr_x = i % local_costmap.info.width + x_pixel_offset;
                     int global_curr_y = i / local_costmap.info.width + y_pixel_offset;
-                    // map.data[global_curr_y * merged_costmap.info.width + global_curr_x] = local_data;
-                    map_pixels_backup.emplace_back(global_curr_y * merged_costmap.info.width + global_curr_x,
-                                                   merged_costmap.data[global_curr_y * merged_costmap.info.width + global_curr_x]);
-                    merged_costmap.data[global_curr_y * merged_costmap.info.width + global_curr_x] = local_data;
+                    map_pixels_backup.emplace_back(global_curr_y * map.width + global_curr_x,
+                                                   map.data[global_curr_y * map.width + global_curr_x]);
+                    map.data[global_curr_y * map.width + global_curr_x] = local_data;
                 }
             }
         }
-
-        // std::cout << "Local cb: " << (std::chrono::system_clock::now() - local_start).count()/1000000000.0 << "\n";
-        merged_costmap_pub.publish(merged_costmap);
     }
 
     void SharedVoronoiGlobalPlanner::globalCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg)
     {
-        merged_costmap = *msg;
+        //Copy all required data to internal map storage
+        map.height = msg->info.height;
+        map.width = msg->info.width;
+        map.frame_id = msg->header.frame_id;
+        map.resolution = msg->info.resolution;
+        map.origin.position.x = msg->info.origin.position.x;
+        map.origin.position.y = msg->info.origin.position.y;
+        map.data = msg->data;
     }
 
     void SharedVoronoiGlobalPlanner::globalCostmapUpdateCB(const map_msgs::OccupancyGridUpdate::ConstPtr &msg)
     {
-        auto global_start = std::chrono::system_clock::now();
-        merged_costmap.data = msg->data;
+        //Assign update of map data to local map copy
+        map.data = msg->data;
 
-        //Copy back local costmap pixels to prevent oscillation of existence in local obstacles
-        if (!merged_costmap.data.empty())
+        //Call local costmap cb to make sure that local obstacles are not overwritten by global costmap update
+        if(!map.data.empty())
         {
-            if (!local_costmap.data.empty())
-            {
-                const auto costmap_ptr = boost::make_shared<nav_msgs::OccupancyGrid>(local_costmap);
-                localCostmapCB(costmap_ptr);
-            }
+            const auto costmap_ptr = boost::make_shared<nav_msgs::OccupancyGrid>(local_costmap);
+            localCostmapCB(costmap_ptr);
         }
-
-        // std::cout << "Global cb: " << (std::chrono::system_clock::now() - global_start).count()/1000000000.0 << "\n";
     }
 
     void SharedVoronoiGlobalPlanner::cmdVelCB(const geometry_msgs::Twist::ConstPtr &msg)
     {
         cmd_vel = *msg;
-    }
-
-    void SharedVoronoiGlobalPlanner::threadedMapCleanup()
-    {
-        int num_threads = std::thread::hardware_concurrency();
-        std::vector<std::future<std::vector<int>>> future_vector;
-        future_vector.reserve(num_threads);
-
-        int size = map.data.size();
-        int num_pixels = floor(size / num_threads);
-        int start_pixel = 0;
-
-        for (int i = 0; i < num_threads; ++i)
-        {
-            start_pixel = i * num_pixels;
-            if (i == num_threads - 1)
-                num_pixels = size - num_pixels * (int)(num_threads - 1);
-
-            future_vector.emplace_back(
-                std::async(
-                    std::launch::async, [start_pixel, num_pixels](const voronoi_path::Map &map) {
-                        std::vector<int> edited_map;
-                        edited_map.reserve(num_pixels);
-
-                        for (int i = start_pixel; i < start_pixel + num_pixels; i++)
-                        {
-                            int cur_data = map.data[i];
-                            if (cur_data == -1)
-                                edited_map.push_back(0);
-
-                            else
-                                edited_map.push_back(cur_data);
-                        }
-
-                        return edited_map;
-                    },
-                    std::ref(map)));
-        }
-
-        map.data.clear();
-        for (int i = 0; i < future_vector.size(); i++)
-        {
-            future_vector[i].wait();
-            std::vector<int> temp_vec = future_vector[i].get();
-
-            map.data.insert(map.data.end(), make_move_iterator(temp_vec.begin()), make_move_iterator(temp_vec.end()));
-        }
     }
 } // namespace shared_voronoi_global_planner

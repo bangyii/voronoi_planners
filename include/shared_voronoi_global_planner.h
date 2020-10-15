@@ -12,6 +12,7 @@
 #include <base_local_planner/world_model.h>
 #include <base_local_planner/costmap_model.h>
 #include <chrono>
+#include <memory>
 
 #ifndef SHARED_VORONOI_GLOBAL_PLANNER_H
 #define SHARED_VORONOI_GLOBAL_PLANNER_H
@@ -30,19 +31,44 @@ namespace shared_voronoi_global_planner
                       std::vector<geometry_msgs::PoseStamped> &plan);
 
     private:
+        /**
+         * Internal copy of local costmap from ROS
+         **/
         nav_msgs::OccupancyGrid local_costmap;
-        nav_msgs::OccupancyGrid merged_costmap;
-        voronoi_path::Map map;
-        voronoi_path::voronoi_path voronoi_path;
-        bool initialized_ = false;
-        int num_paths = 2;
-        bool costmap_received = false;
 
-        //Params
+        /** 
+         * Internal map which merges global and local costmap from ros
+         **/
+        voronoi_path::Map map;
+
+        /**
+         * Voronoi path object which is used for planning
+         **/
+        voronoi_path::voronoi_path voronoi_path;
+
+        /**
+         * Flag indicating whether the planner has been initialized
+         **/ 
+        bool initialized_ = false;
+
+        /**
+         * Param to indicate number of paths to find
+         **/
+        int num_paths = 2;
+
+        /**
+         * Rate at which to update the voronoi diagram, Hz
+         **/
         double update_voronoi_rate = 0.3;
-        double update_costmap_rate = 0.3;
+
+        /**
+         * Flag indicating whether to print timings, used for debugging
+         **/
         bool print_timings = true;
-        bool publish_centroids = false;
+
+        /**
+         * If there is a node within this threshold away from a node that only has 1 connection, they will both be connected
+         **/
         int node_connection_threshold_pix = 1;
 
         /**
@@ -91,6 +117,16 @@ namespace shared_voronoi_global_planner
          **/
         double extra_point_distance = 1.0;
 
+        /**
+         * Joystick maximum linear velocity, to normalize for joystick direction
+         **/
+        double joy_max_lin = 1.0;
+
+        /**
+         * Joystick maximum angular velocity, to normalize for joystick direction
+         **/
+        double joy_max_ang = 1.0;
+
 
         double forward_sim_time = 1.0;       //s
         double forward_sim_resolution = 0.1; //m
@@ -113,7 +149,6 @@ namespace shared_voronoi_global_planner
         ros::Subscriber global_update_sub;
         ros::Subscriber user_vel_sub;
 
-        ros::Publisher merged_costmap_pub;
         ros::Publisher global_path_pub;
         ros::Publisher all_paths_pub;
         ros::Publisher user_direction_pub;
@@ -129,9 +164,7 @@ namespace shared_voronoi_global_planner
         void globalCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg);
         void globalCostmapUpdateCB(const map_msgs::OccupancyGridUpdate::ConstPtr &msg);
         void updateVoronoiCB(const ros::WallTimerEvent &e);
-        void updateVoronoiMapCB(const ros::WallTimerEvent &e);
         void cmdVelCB(const geometry_msgs::Twist::ConstPtr &msg);
-        void threadedMapCleanup();
         int getMatchedPath(const geometry_msgs::PoseStamped &curr_pose, const std::vector<std::vector<geometry_msgs::PoseStamped>> &plans_);
         double vectorAngle(const double vec1[2], const double vec2[2]);
     };
