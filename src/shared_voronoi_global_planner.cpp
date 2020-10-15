@@ -167,7 +167,7 @@ namespace shared_voronoi_global_planner
             global_costmap_sub = nh.subscribe("/move_base/global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);
             global_update_sub = nh.subscribe("/move_base/global_costmap/costmap_updates", 1, &SharedVoronoiGlobalPlanner::globalCostmapUpdateCB, this);
             local_costmap_sub = nh.subscribe("/move_base/local_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::localCostmapCB, this);
-            user_vel_sub = nh.subscribe("/test_vel", 1, &SharedVoronoiGlobalPlanner::cmdVelCB, this);
+            user_vel_sub = nh.subscribe(joystick_topic, 1, &SharedVoronoiGlobalPlanner::cmdVelCB, this);
 
             global_path_pub = nh.advertise<nav_msgs::Path>("plan", 1);
             all_paths_pub = nh.advertise<visualization_msgs::MarkerArray>("all_paths", 1);
