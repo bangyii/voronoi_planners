@@ -266,6 +266,11 @@ namespace voronoi_path
          **/
         int node_connection_threshold_pix = 1;
 
+        /**
+         * Whether or not to trim beggining of paths generated
+         **/
+        bool trim_path_beginning = true;
+
     private:
         /**
          * Pointer to map from the ROS side of planner
@@ -462,6 +467,14 @@ namespace voronoi_path
          * @return complex value representing the homotopy class of path_
          **/
         std::complex<double> calcHomotopyClass(const std::vector<int> &path_);
+
+        /**
+         * Trim the beginning of path such that the starting node is directly connected to the node before X,
+         * where X is the node that will cause a collision if the starting node is directly connected to
+         * @param path path to trim
+         * @return bool indicating success
+         **/
+        bool trimPathBeginning(std::vector<GraphNode> &path);
     };
 
 } // namespace voronoi_path

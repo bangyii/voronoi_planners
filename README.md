@@ -65,3 +65,9 @@ A* path finding algorithm with Euclidean distance heuristics is used to find the
 `visualize_edges:` Set true to publish all voronoi edges and singly-connected nodes to rviz. Note that occasionally the edges might spasm, but this only happens to the visualization, internally the edges are still correct.
 
 `node_connection_threshold_pix:` Since the voronoi library generates nodes in terms of pixels, and in order to get the adjacency list, the nodes have to be "discretized" and given a unique hash; occasionally, nodes that are next to each other, which are technically the same node, will not be given the same hash. This param fixes the issue by finding singly connected nodes in the adjacency list, then connects it to the nearest node if it less than this param's threshold. This prevents broken edges in the adjacency list.
+
+`joy_max_lin:` Maximum joystick linear velocity, used to normalize joystick input to be able to get correct angle of joystick.
+
+`joy_max_ang:` Maximum joystick angular velocity, same usage as joy_max_lin.
+
+`trim_path_beginning:` Boolean indicating whether or not the trim the beginning of paths to reduce redundant turns

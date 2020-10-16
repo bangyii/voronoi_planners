@@ -127,6 +127,10 @@ namespace shared_voronoi_global_planner
          **/
         double joy_max_ang = 1.0;
 
+        /**
+         * Whether or not to trim beggining of paths generated
+         **/
+        bool trim_path_beginning = true;
 
         double forward_sim_time = 1.0;       //s
         double forward_sim_resolution = 0.1; //m
@@ -137,9 +141,6 @@ namespace shared_voronoi_global_planner
         double prev_local_dir = 0.0;
         std::string joystick_topic = "/test_vel";
         bool visualize_edges = false;
-
-        std::vector<geometry_msgs::PoseStamped> prev_path;
-        geometry_msgs::PoseStamped prev_goal;
         
         std::vector<std::pair<int, int>> map_pixels_backup;
 
