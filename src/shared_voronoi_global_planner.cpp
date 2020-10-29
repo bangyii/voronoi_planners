@@ -1,12 +1,14 @@
 #include "shared_voronoi_global_planner.h"
 #include <pluginlib/class_list_macros.h>
 #include <nav_msgs/Path.h>
-// #include <thread>
-// #include <future>
 #include <tf/transform_datatypes.h>
 #include <algorithm>
 #include <limits>
 #include <geometry_msgs/Point.h>
+
+#include "DTW.h"
+#include "FastDTW.h"
+#include "EuclideanDistance.h"
 
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -39,7 +41,7 @@ namespace shared_voronoi_global_planner
         voronoi_path.getObstacleCentroids(centers);
 
         //Publish visualization marker for use in rviz
-        if(visualize_edges)
+        if (visualize_edges)
         {
             std::vector<voronoi_path::GraphNode> nodes;
             std::vector<voronoi_path::GraphNode> lonely_nodes;
@@ -62,13 +64,13 @@ namespace shared_voronoi_global_planner
             marker.pose.orientation.w = 1.0;
             marker.points.reserve(nodes.size());
 
-            for(const auto& node : nodes)
+            for (const auto &node : nodes)
             {
                 geometry_msgs::Point temp_point;
                 temp_point.x = node.x * static_cast<double>(map.resolution) + map.origin.position.x;
                 temp_point.y = node.y * static_cast<double>(map.resolution) + map.origin.position.y;
 
-                if(node.x > 0 && node.x < 0.01 && node.y > 0 && node.y < 0.01)
+                if (node.x > 0 && node.x < 0.01 && node.y > 0 && node.y < 0.01)
                     break;
 
                 marker.points.push_back(std::move(temp_point));
@@ -90,7 +92,7 @@ namespace shared_voronoi_global_planner
             marker_lonely.pose.orientation.w = 1.0;
             marker_lonely.points.reserve(lonely_nodes.size());
 
-            for(const auto& node : lonely_nodes)
+            for (const auto &node : lonely_nodes)
             {
                 geometry_msgs::Point temp_point;
                 temp_point.x = node.x * static_cast<double>(map.resolution) + map.origin.position.x;
@@ -115,7 +117,7 @@ namespace shared_voronoi_global_planner
             marker_obstacles.pose.orientation.w = 1.0;
             marker_obstacles.points.reserve(centers.size());
 
-            for(const auto& center : centers)
+            for (const auto &center : centers)
             {
                 geometry_msgs::Point temp_point;
                 temp_point.x = center.x * static_cast<double>(map.resolution) + map.origin.position.x;
@@ -154,7 +156,7 @@ namespace shared_voronoi_global_planner
             nh.getParam("visualize_edges", visualize_edges);
             nh.getParam("node_connection_threshold_pix", node_connection_threshold_pix);
             nh.getParam("collision_threshold", collision_threshold);
-            nh.getParam("joy_max_lin", joy_max_lin);            
+            nh.getParam("joy_max_lin", joy_max_lin);
             nh.getParam("joy_max_ang", joy_max_ang);
             nh.getParam("trim_path_beginning", trim_path_beginning);
 
@@ -269,6 +271,66 @@ namespace shared_voronoi_global_planner
             if ((cmd_vel.linear.x != 0.0 || cmd_vel.angular.z != 0.0) && dist > pow(near_goal_threshold, 2))
                 preferred_path = getMatchedPath(start, all_paths_meters);
 
+            //Select path that is most similar to previously selected path using dynamic time warping library if no user direction specified
+            else if(!prev_path.empty())
+            {
+                auto start = std::chrono::system_clock::now();
+                //Convert previously selected path into a time series
+                fastdtw::TimeSeries<double, 1> prev_path_series;
+                prev_path_series.addLast(0, fastdtw::TimeSeriesPoint<double, 1>(&prev_path[0].pose.position.x));
+
+                double min_cost = std::numeric_limits<double>::infinity();
+                double sum_dist = 0;
+
+                //Loop up until 2nd last point for previous path
+                for(int i = 1; i < prev_path.size(); ++i)
+                {
+                    //Set time to be cumulative squared distance along the path
+                    double sqr = pow(prev_path[i].pose.position.x - prev_path[i-1].pose.position.x, 2) +
+                                pow(prev_path[i].pose.position.y - prev_path[i-1].pose.position.y, 2);
+                    
+                    //Ensure that distance along path is an increasing value, otherwise addLast will call assert(false)
+                    if(sqr == 0.0)
+                        continue;
+                    
+                    sum_dist += sqr;
+                    prev_path_series.addLast(sum_dist, fastdtw::TimeSeriesPoint<double, 1>(&prev_path[i].pose.position.x));
+                }
+
+                //Loop through all generated paths to find potential one
+                for(int i = 0; i < all_paths_meters.size(); ++i)
+                {
+                    fastdtw::TimeSeries<double, 1> temp_path_series;
+                    temp_path_series.addLast(0, fastdtw::TimeSeriesPoint<double, 1>(&all_paths_meters[i][0].pose.position.x));
+
+                    sum_dist = 0;
+                    for(int j = 1; j < all_paths_meters[i].size(); ++j)
+                    {
+                        //Set time to be cumulative squared distance along the path
+                        double sqr = pow(all_paths_meters[i][j].pose.position.x - all_paths_meters[i][j-1].pose.position.x, 2) +
+                                    pow(all_paths_meters[i][j].pose.position.y - all_paths_meters[i][j-1].pose.position.y, 2);
+                        
+                        //Ensure that distance along path is an increasing value, otherwise addLast will call assert(false)
+                        if(sqr == 0.0)
+                            continue;
+                        
+                        sum_dist += sqr;
+                        temp_path_series.addLast(sum_dist, fastdtw::TimeSeriesPoint<double, 1>(&all_paths_meters[i][j].pose.position.x));
+                    }
+
+                    fastdtw::TimeWarpInfo<double> info = fastdtw::FAST::getWarpInfoBetween(prev_path_series, temp_path_series, fastdtw::EuclideanDistance());
+                    
+                    if(info.getDistance() < min_cost)
+                    {
+                        min_cost = info.getDistance();
+                        preferred_path = i;
+                    }
+                }
+
+                if(print_timings)
+                    std::cout << "DTW time: " << (std::chrono::system_clock::now() - start).count()/1000000000.0 << "\n";
+            }
+
             //Set selected plan
             if (!all_paths_meters[preferred_path].empty())
                 plan = all_paths_meters[preferred_path];
@@ -279,6 +341,7 @@ namespace shared_voronoi_global_planner
             viz_path.header.frame_id = map.frame_id;
             viz_path.poses = all_paths_meters[preferred_path];
             global_path_pub.publish(viz_path);
+            prev_path = plan;
 
             return true;
         }
@@ -317,12 +380,12 @@ namespace shared_voronoi_global_planner
 
         //Normalize the cmd angular velocity to get accurate joystick direction
         double normalized_ang = cmd_vel.angular.z / joy_max_ang;
-        if(normalized_ang > 1)
+        if (normalized_ang > 1)
             normalized_ang = 1;
 
         //Normalize the cmd linear velocity to get accurate joystick direction
         double normalized_lin = cmd_vel.linear.x / joy_max_lin;
-        if(normalized_lin > 1)
+        if (normalized_lin > 1)
             normalized_lin = 1;
 
         double new_local_dir = user_dir_filter * atan2(normalized_ang, normalized_lin) + (1 - user_dir_filter) * prev_local_dir;
@@ -462,7 +525,7 @@ namespace shared_voronoi_global_planner
         map.data = msg->data;
 
         //Call local costmap cb to make sure that local obstacles are not overwritten by global costmap update
-        if(!map.data.empty())
+        if (!map.data.empty())
         {
             const auto costmap_ptr = boost::make_shared<nav_msgs::OccupancyGrid>(local_costmap);
             localCostmapCB(costmap_ptr);

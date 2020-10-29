@@ -19,6 +19,7 @@ find_package(catkin REQUIRED COMPONENTS
   costmap_2d
   tf2
   visualization_msgs
+  fast_dtw
 )
 
 find_package(OpenCV 3 REQUIRED)
@@ -146,7 +147,7 @@ add_library(${PROJECT_NAME}_lib
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
 add_dependencies(${PROJECT_NAME}_lib ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_lib voronoi_path_planner)
+target_link_libraries(${PROJECT_NAME}_lib voronoi_path_planner ${catkin_LIBRARIES})
 
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context

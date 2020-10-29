@@ -36,6 +36,9 @@ namespace shared_voronoi_global_planner
          **/
         nav_msgs::OccupancyGrid local_costmap;
 
+        std::vector<geometry_msgs::PoseStamped> prev_path;
+        std::vector<double> prev_path_double;
+
         /** 
          * Internal map which merges global and local costmap from ros
          **/
