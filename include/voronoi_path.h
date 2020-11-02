@@ -209,6 +209,13 @@ namespace voronoi_path
          **/
         void setLocalVertices(const std::vector<GraphNode> &vertices);
 
+        /** 
+         * Gets the bezier interpolation of a vector of paths
+         * @param paths vector of paths to be interpolated
+         * @return boolean indicating success
+         **/
+        bool bezierInterp(std::vector<std::vector<GraphNode>>& paths);
+
         /**
          * Pixel resolution to increment when checking if an edge collision occurs. Value of 0.1 means the edge will
          * be checked at every 0.1 pixel intervals

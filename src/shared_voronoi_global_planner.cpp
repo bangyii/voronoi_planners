@@ -37,6 +37,7 @@ namespace shared_voronoi_global_planner
 
         voronoi_path.mapToGraph(&map);
 
+        //Get obstacle centroids from map
         std::vector<voronoi_path::GraphNode> centers;
         voronoi_path.getObstacleCentroids(centers);
 
@@ -160,6 +161,7 @@ namespace shared_voronoi_global_planner
             nh.getParam("joy_max_ang", joy_max_ang);
             nh.getParam("trim_path_beginning", trim_path_beginning);
 
+            //Set parameters for voronoi path object
             voronoi_path.h_class_threshold = h_class_threshold;
             voronoi_path.print_timings = print_timings;
             voronoi_path.node_connection_threshold_pix = node_connection_threshold_pix;
@@ -198,6 +200,10 @@ namespace shared_voronoi_global_planner
 
         //Get voronoi paths
         std::vector<std::vector<voronoi_path::GraphNode>> all_paths = voronoi_path.getPath(start_point, end_point, num_paths);
+
+        //Smooth the path received from voronoi planner
+        if(!voronoi_path.bezierInterp(all_paths))
+            return true;
 
         if (all_paths.size() < num_paths)
             ROS_WARN("Could not find all requested paths. Requested: %d, found: %ld", num_paths, all_paths.size());

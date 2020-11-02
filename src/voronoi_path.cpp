@@ -423,9 +423,10 @@ namespace voronoi_path
         auto start_time = std::chrono::system_clock::now();
         std::vector<std::vector<GraphNode>> path;
 
+        //Find nearest node to starting and end positions
         int start_node, end_node;
         if (!getNearestNode(start, end, start_node, end_node))
-            return path;
+            return std::vector<std::vector<GraphNode>>();
 
         std::vector<int> shortest_path;
         double cost;
@@ -439,12 +440,7 @@ namespace voronoi_path
             auto kth_time = std::chrono::system_clock::now();
             //Get next shortest path
             if (num_paths >= 1)
-            {
-                if (print_timings)
-                    std::cout << "Finding alternate paths\n";
-
                 kthShortestPaths(start_node, end_node, shortest_path, all_paths, num_paths - 1);
-            }
 
             if (print_timings)
                 std::cout << "Find alternate paths: \t" << ((std::chrono::system_clock::now() - kth_time).count() / 1000000000.0) << "s\n";
@@ -469,78 +465,7 @@ namespace voronoi_path
                     trimPathBeginning(all_path_nodes[i]);
             }
 
-            //Bezier interpolation
-            //TODO: Can be threaded as well
-            //For all paths, j = path number
-            for (int j = 0; j < all_path_nodes.size(); ++j)
-            {
-                std::vector<GraphNode> bezier_path;
-                int num_of_nodes = all_path_nodes[j].size();
-
-                std::vector<GraphNode> sub_nodes;
-                std::vector<GraphNode> prev_2_nodes;
-
-                //For all nodes in path
-                for (int i = 1; i < num_of_nodes; ++i)
-                {
-                    //If adjacent edges in original path collide, then something is wrong with map
-                    //Return empty path because the original path has collision, not feasible
-                    if(edgeCollides(all_path_nodes[j][i-1], all_path_nodes[j][i]))
-                        return std::vector<std::vector<GraphNode>>();
-
-                    //Add previous node and extra node if sub_nodes was recently reset due to collision or initialization
-                    if (sub_nodes.size() == 0)
-                    {
-                        sub_nodes.push_back(all_path_nodes[j][i - 1]);
-
-                        //Calculate extra node based on previous subsection's gradient
-                        if (i > 1 && prev_2_nodes.size() == 2)
-                        {
-                            GraphNode dir(prev_2_nodes[1] - prev_2_nodes[0]);
-                            dir.setUnitVector();
-
-                            //Extra point is collinear with prev[0] and prev[1], but further along than p[1]
-                            sub_nodes.push_back(prev_2_nodes[1] + dir * extra_point_distance * map_ptr->resolution);
-
-                            //Do not insert if collision occurs when extra point is added
-                            if (edgeCollides(sub_nodes[sub_nodes.size() - 2], sub_nodes.back()))
-                                sub_nodes.pop_back();
-
-                            prev_2_nodes.clear();
-                        }
-                    }
-
-                    //If this node to the first node does not collide
-                    if (!edgeCollides(sub_nodes[0], all_path_nodes[j][i]) && sub_nodes.size() < bezier_max_n)
-                        sub_nodes.push_back(all_path_nodes[j][i]);
-
-                    //Collision happened or limit reached, find sub path with current sub nodes
-                    else
-                    {
-                        //Retrace back i value to prevent skipping a node
-                        --i;
-
-                        //Calculate the bezier subsection
-                        std::vector<GraphNode> temp_bezier = bezierSubsection(sub_nodes);
-                        bezier_path.insert(bezier_path.end(), temp_bezier.begin(), temp_bezier.end());
-
-                        if (sub_nodes.size() > 1)
-                            prev_2_nodes.insert(prev_2_nodes.begin(), sub_nodes.end() - 2, sub_nodes.end());
-
-                        sub_nodes.clear();
-                    }
-                }
-
-                //If no collision before the end, find sub path as well
-                if (sub_nodes.size() != 0)
-                {
-                    std::vector<GraphNode> temp_bezier = bezierSubsection(sub_nodes);
-                    bezier_path.insert(bezier_path.end(), temp_bezier.begin(), temp_bezier.end());
-                    sub_nodes.clear();
-                }
-                path.push_back(bezier_path);
-                // std::cout << "Bezier path size " << bezier_path.size() << "\n";
-            }
+            path = std::move(all_path_nodes);
 
             if (print_timings)
             {
@@ -1292,21 +1217,6 @@ namespace voronoi_path
         double curr_y = points.begin()->y;
         double pixel_threshold = min_node_sep_sq * map_ptr->resolution;
 
-        // // Connect start node to node right before the node that will collide if connected to
-        // auto start_trim_it = points.begin() + 1;
-        // while(start_trim_it != points.end())
-        // {
-        //     //If doesn't collide, delete node
-        //     if(!edgeCollides(*points.begin(), *start_trim_it))
-        //         start_trim_it = points.erase(start_trim_it);
-
-        //     else
-        //         break; 
-        // }
-
-        // curr_x = points.begin()->x;
-        // curr_y = points.begin()->y;
-
         //Delete points that are too near to each other, starting from 2nd node
         auto it = points.begin() + 1;
         while (it < points.end())
@@ -1358,4 +1268,81 @@ namespace voronoi_path
         return bezier_path;
     }
 
+    bool voronoi_path::bezierInterp(std::vector<std::vector<GraphNode>>& paths)
+    {
+        //Bezier interpolation
+        //TODO: Can be threaded as well
+        //For all paths, j = path number
+        for (int j = 0; j < paths.size(); ++j)
+        {
+            std::vector<GraphNode> bezier_path;
+            int num_of_nodes = paths[j].size();
+
+            std::vector<GraphNode> sub_nodes;
+            std::vector<GraphNode> prev_2_nodes;
+
+            //For all nodes in path
+            for (int i = 1; i < num_of_nodes; ++i)
+            {
+                //If adjacent edges in original path collide, then something is wrong with map
+                //Return empty path because the original path has collision, not feasible
+                if(edgeCollides(paths[j][i-1], paths[j][i]))
+                    return false;
+
+                //Add previous node and extra node if sub_nodes was recently reset due to collision or initialization
+                if (sub_nodes.size() == 0)
+                {
+                    sub_nodes.push_back(paths[j][i - 1]);
+
+                    //Calculate extra node based on previous subsection's gradient
+                    if (i > 1 && prev_2_nodes.size() == 2)
+                    {
+                        GraphNode dir(prev_2_nodes[1] - prev_2_nodes[0]);
+                        dir.setUnitVector();
+
+                        //Extra point is collinear with prev[0] and prev[1], but further along than p[1]
+                        sub_nodes.push_back(prev_2_nodes[1] + dir * extra_point_distance * map_ptr->resolution);
+
+                        //Do not insert if collision occurs when extra point is added
+                        if (edgeCollides(sub_nodes[sub_nodes.size() - 2], sub_nodes.back()))
+                            sub_nodes.pop_back();
+
+                        prev_2_nodes.clear();
+                    }
+                }
+
+                //If this node to the first node does not collide
+                if (!edgeCollides(sub_nodes[0], paths[j][i]) && sub_nodes.size() < bezier_max_n)
+                    sub_nodes.push_back(paths[j][i]);
+
+                //Collision happened or limit reached, find sub path with current sub nodes
+                else
+                {
+                    //Retrace back i value to prevent skipping a node
+                    --i;
+
+                    //Calculate the bezier subsection
+                    std::vector<GraphNode> temp_bezier = bezierSubsection(sub_nodes);
+                    bezier_path.insert(bezier_path.end(), temp_bezier.begin(), temp_bezier.end());
+
+                    if (sub_nodes.size() > 1)
+                        prev_2_nodes.insert(prev_2_nodes.begin(), sub_nodes.end() - 2, sub_nodes.end());
+
+                    sub_nodes.clear();
+                }
+            }
+
+            //If no collision before the end, find sub path as well
+            if (sub_nodes.size() != 0)
+            {
+                std::vector<GraphNode> temp_bezier = bezierSubsection(sub_nodes);
+                bezier_path.insert(bezier_path.end(), temp_bezier.begin(), temp_bezier.end());
+                sub_nodes.clear();
+            }
+
+            paths[j] = std::move(bezier_path);
+        }
+
+        return true;
+    }
 } // namespace voronoi_path
