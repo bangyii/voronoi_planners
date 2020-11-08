@@ -1345,4 +1345,15 @@ namespace voronoi_path
 
         return true;
     }
+    bool voronoi_path::clearPreviousPaths()
+    {
+        previous_paths.clear();
+        
+        return true;
+    }
+
+    bool voronoi_path::hasPreviousPaths()
+    {
+        return !previous_paths.empty();
+    }
 } // namespace voronoi_path

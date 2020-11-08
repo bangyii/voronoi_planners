@@ -7,6 +7,7 @@
 #include <costmap_2d/costmap_2d.h>
 #include <nav_core/base_global_planner.h>
 #include <geometry_msgs/PoseStamped.h>
+#include <actionlib_msgs/GoalStatusArray.h>
 #include <geometry_msgs/Twist.h>
 #include <angles/angles.h>
 #include <base_local_planner/world_model.h>
@@ -144,6 +145,7 @@ namespace shared_voronoi_global_planner
         double prev_local_dir = 0.0;
         std::string joystick_topic = "/test_vel";
         bool visualize_edges = false;
+        bool subscribe_local_costmap = true;
         
         std::vector<std::pair<int, int>> map_pixels_backup;
 
@@ -152,6 +154,7 @@ namespace shared_voronoi_global_planner
         ros::Subscriber global_costmap_sub;
         ros::Subscriber global_update_sub;
         ros::Subscriber user_vel_sub;
+        ros::Subscriber move_base_stat_sub;
 
         ros::Publisher global_path_pub;
         ros::Publisher all_paths_pub;
@@ -165,6 +168,7 @@ namespace shared_voronoi_global_planner
         ros::Publisher centroid_pub;
 
         void localCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg);
+        void moveBaseStatusCB(const actionlib_msgs::GoalStatusArray::ConstPtr &msg);
         void globalCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg);
         void globalCostmapUpdateCB(const map_msgs::OccupancyGridUpdate::ConstPtr &msg);
         void updateVoronoiCB(const ros::WallTimerEvent &e);

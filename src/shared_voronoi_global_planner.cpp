@@ -160,6 +160,7 @@ namespace shared_voronoi_global_planner
             nh.getParam("joy_max_lin", joy_max_lin);
             nh.getParam("joy_max_ang", joy_max_ang);
             nh.getParam("trim_path_beginning", trim_path_beginning);
+            nh.getParam("subscribe_local_costmap", subscribe_local_costmap);
 
             //Set parameters for voronoi path object
             voronoi_path.h_class_threshold = h_class_threshold;
@@ -172,7 +173,11 @@ namespace shared_voronoi_global_planner
             //Subscribe and advertise related topics
             global_costmap_sub = nh.subscribe("/move_base/global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);
             global_update_sub = nh.subscribe("/move_base/global_costmap/costmap_updates", 1, &SharedVoronoiGlobalPlanner::globalCostmapUpdateCB, this);
-            local_costmap_sub = nh.subscribe("/move_base/local_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::localCostmapCB, this);
+            move_base_stat_sub = nh.subscribe("/move_base/status", 1, &SharedVoronoiGlobalPlanner::moveBaseStatusCB, this);
+
+            if (subscribe_local_costmap)
+                local_costmap_sub = nh.subscribe("/move_base/local_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::localCostmapCB, this);
+
             user_vel_sub = nh.subscribe(joystick_topic, 1, &SharedVoronoiGlobalPlanner::cmdVelCB, this);
 
             global_path_pub = nh.advertise<nav_msgs::Path>("plan", 1);
@@ -181,7 +186,8 @@ namespace shared_voronoi_global_planner
             edges_viz_pub = nh.advertise<visualization_msgs::MarkerArray>("voronoi_edges", 1);
 
             //Create timer to update Voronoi diagram
-            voronoi_update_timer = nh.createWallTimer(ros::WallDuration(1.0 / update_voronoi_rate), &SharedVoronoiGlobalPlanner::updateVoronoiCB, this);
+            if (update_voronoi_rate > 0.0)
+                voronoi_update_timer = nh.createWallTimer(ros::WallDuration(1.0 / update_voronoi_rate), &SharedVoronoiGlobalPlanner::updateVoronoiCB, this);
 
             ROS_INFO("Shared Voronoi Global Planner initialized");
         }
@@ -192,168 +198,180 @@ namespace shared_voronoi_global_planner
 
     bool SharedVoronoiGlobalPlanner::makePlan(const geometry_msgs::PoseStamped &start, const geometry_msgs::PoseStamped &goal, std::vector<geometry_msgs::PoseStamped> &plan)
     {
-        //Get start and end points in terms of global costmap pixels
-        voronoi_path::GraphNode start_point((start.pose.position.x - map.origin.position.x) / map.resolution,
-                                            (start.pose.position.y - map.origin.position.y) / map.resolution);
-        voronoi_path::GraphNode end_point((goal.pose.position.x - map.origin.position.x) / map.resolution,
-                                          (goal.pose.position.y - map.origin.position.y) / map.resolution);
-
-        //Get voronoi paths
-        std::vector<std::vector<voronoi_path::GraphNode>> all_paths = voronoi_path.getPath(start_point, end_point, num_paths);
-
-        //Smooth the path received from voronoi planner
-        if(!voronoi_path.bezierInterp(all_paths))
-            return true;
-
-        if (all_paths.size() < num_paths)
-            ROS_WARN("Could not find all requested paths. Requested: %d, found: %ld", num_paths, all_paths.size());
-
-        //If paths are found
-        if (!all_paths.empty())
+        //move_base had a goal previously set, so paths should be trimmed based on previous one instead of replanning entirely
+        if (voronoi_path.hasPreviousPaths())
         {
-            std::vector<std::vector<geometry_msgs::PoseStamped>> all_paths_meters(all_paths.size());
-            visualization_msgs::MarkerArray marker_array;
-
-            //Convert node numbers to position on map for path
-            std_msgs::Header header;
-            header.stamp = ros::Time::now();
-            header.frame_id = map.frame_id;
-            for (int i = 0; i < all_paths.size(); ++i)
-            {
-                visualization_msgs::Marker marker;
-                if (publish_all_path_markers)
-                {
-                    //Create marker item to store a line
-                    marker.header = header;
-                    marker.ns = std::string("Path ") + std::to_string(i);
-                    marker.id = i;
-                    marker.type = 4;
-                    marker.action = 0;
-                    marker.scale.x = 0.05;
-                    marker.color.r = (255 / all_paths.size() * i) / 255.0;
-                    marker.color.g = (255 / all_paths.size() * i) / 255.0;
-                    marker.color.b = (255 / all_paths.size() * i) / 255.0;
-                    marker.color.a = 1.0;
-                    marker.pose.orientation.w = 1.0;
-                    marker.lifetime = ros::Duration(1.0);
-                }
-
-                //Loop through all the nodes for path i
-                for (int j = 0; j < all_paths[i].size(); ++j)
-                {
-                    geometry_msgs::PoseStamped new_pose;
-                    new_pose.header = header;
-                    new_pose.pose.position.x = all_paths[i][j].x * map.resolution + map.origin.position.x;
-                    new_pose.pose.position.y = all_paths[i][j].y * map.resolution + map.origin.position.y;
-                    new_pose.pose.position.z = 0;
-
-                    //TODO: Set orientation of intermediate poses
-                    new_pose.pose.orientation.w = 1;
-
-                    all_paths_meters[i].push_back(new_pose);
-
-                    if (publish_all_path_markers)
-                        marker.points.push_back(new_pose.pose.position);
-                }
-
-                //Adjust orientation of start and end positions
-                if (!all_paths_meters[i].empty())
-                {
-                    all_paths_meters[i][0] = start;
-                    all_paths_meters[i].back() = goal;
-                }
-
-                if (publish_all_path_markers)
-                    marker_array.markers.push_back(marker);
-            }
-
-            //Publish visualization for all available paths
-            if (publish_all_path_markers)
-                all_paths_pub.publish(marker_array);
-
-            //Select the path most similar to user commanded velocity path
-            int preferred_path = 0;
-            double dist = pow(start.pose.position.x - goal.pose.position.x, 2) + pow(start.pose.position.y - goal.pose.position.y, 2);
-            if ((cmd_vel.linear.x != 0.0 || cmd_vel.angular.z != 0.0) && dist > pow(near_goal_threshold, 2))
-                preferred_path = getMatchedPath(start, all_paths_meters);
-
-            //Select path that is most similar to previously selected path using dynamic time warping library if no user direction specified
-            else if(!prev_path.empty())
-            {
-                auto start = std::chrono::system_clock::now();
-                //Convert previously selected path into a time series
-                fastdtw::TimeSeries<double, 1> prev_path_series;
-                prev_path_series.addLast(0, fastdtw::TimeSeriesPoint<double, 1>(&prev_path[0].pose.position.x));
-
-                double min_cost = std::numeric_limits<double>::infinity();
-                double sum_dist = 0;
-
-                //Loop up until 2nd last point for previous path
-                for(int i = 1; i < prev_path.size(); ++i)
-                {
-                    //Set time to be cumulative squared distance along the path
-                    double sqr = pow(prev_path[i].pose.position.x - prev_path[i-1].pose.position.x, 2) +
-                                pow(prev_path[i].pose.position.y - prev_path[i-1].pose.position.y, 2);
-                    
-                    //Ensure that distance along path is an increasing value, otherwise addLast will call assert(false)
-                    if(sqr == 0.0)
-                        continue;
-                    
-                    sum_dist += sqr;
-                    prev_path_series.addLast(sum_dist, fastdtw::TimeSeriesPoint<double, 1>(&prev_path[i].pose.position.x));
-                }
-
-                //Loop through all generated paths to find potential one
-                for(int i = 0; i < all_paths_meters.size(); ++i)
-                {
-                    fastdtw::TimeSeries<double, 1> temp_path_series;
-                    temp_path_series.addLast(0, fastdtw::TimeSeriesPoint<double, 1>(&all_paths_meters[i][0].pose.position.x));
-
-                    sum_dist = 0;
-                    for(int j = 1; j < all_paths_meters[i].size(); ++j)
-                    {
-                        //Set time to be cumulative squared distance along the path
-                        double sqr = pow(all_paths_meters[i][j].pose.position.x - all_paths_meters[i][j-1].pose.position.x, 2) +
-                                    pow(all_paths_meters[i][j].pose.position.y - all_paths_meters[i][j-1].pose.position.y, 2);
-                        
-                        //Ensure that distance along path is an increasing value, otherwise addLast will call assert(false)
-                        if(sqr == 0.0)
-                            continue;
-                        
-                        sum_dist += sqr;
-                        temp_path_series.addLast(sum_dist, fastdtw::TimeSeriesPoint<double, 1>(&all_paths_meters[i][j].pose.position.x));
-                    }
-
-                    fastdtw::TimeWarpInfo<double> info = fastdtw::FAST::getWarpInfoBetween(prev_path_series, temp_path_series, fastdtw::EuclideanDistance());
-                    
-                    if(info.getDistance() < min_cost)
-                    {
-                        min_cost = info.getDistance();
-                        preferred_path = i;
-                    }
-                }
-
-                if(print_timings)
-                    std::cout << "DTW time: " << (std::chrono::system_clock::now() - start).count()/1000000000.0 << "\n";
-            }
-
-            //Set selected plan
-            if (!all_paths_meters[preferred_path].empty())
-                plan = all_paths_meters[preferred_path];
-
-            //Publish selected plan for visualization
-            nav_msgs::Path viz_path;
-            viz_path.header.stamp = ros::Time::now();
-            viz_path.header.frame_id = map.frame_id;
-            viz_path.poses = all_paths_meters[preferred_path];
-            global_path_pub.publish(viz_path);
-            prev_path = plan;
+            ROS_INFO("move_base was previously running");
 
             return true;
         }
 
+        //move_base was not running, there are no previous paths. So planning should be done from scratch
         else
-            return false;
+        {
+            //Get start and end points in terms of global costmap pixels
+            voronoi_path::GraphNode start_point((start.pose.position.x - map.origin.position.x) / map.resolution,
+                                                (start.pose.position.y - map.origin.position.y) / map.resolution);
+            voronoi_path::GraphNode end_point((goal.pose.position.x - map.origin.position.x) / map.resolution,
+                                              (goal.pose.position.y - map.origin.position.y) / map.resolution);
+
+            //Get voronoi paths
+            std::vector<std::vector<voronoi_path::GraphNode>> all_paths = voronoi_path.getPath(start_point, end_point, num_paths);
+
+            //Smooth the path received from voronoi planner, return true when fail so the global planner can try replanning/update position
+            if(!voronoi_path.bezierInterp(all_paths))
+                return true;
+
+            if (all_paths.size() < num_paths)
+                ROS_WARN("Could not find all requested paths. Requested: %d, found: %ld", num_paths, all_paths.size());
+
+            //If paths are found
+            if (!all_paths.empty())
+            {
+                std::vector<std::vector<geometry_msgs::PoseStamped>> all_paths_meters(all_paths.size());
+                visualization_msgs::MarkerArray marker_array;
+
+                //Convert node numbers to position on map for path
+                std_msgs::Header header;
+                header.stamp = ros::Time::now();
+                header.frame_id = map.frame_id;
+                for (int i = 0; i < all_paths.size(); ++i)
+                {
+                    visualization_msgs::Marker marker;
+                    if (publish_all_path_markers)
+                    {
+                        //Create marker item to store a line
+                        marker.header = header;
+                        marker.ns = std::string("Path ") + std::to_string(i);
+                        marker.id = i;
+                        marker.type = 4;
+                        marker.action = 0;
+                        marker.scale.x = 0.05;
+                        marker.color.r = (255 / all_paths.size() * i) / 255.0;
+                        marker.color.g = (255 / all_paths.size() * i) / 255.0;
+                        marker.color.b = (255 / all_paths.size() * i) / 255.0;
+                        marker.color.a = 1.0;
+                        marker.pose.orientation.w = 1.0;
+                        marker.lifetime = ros::Duration(1.0);
+                    }
+
+                    //Loop through all the nodes for path i
+                    for (int j = 0; j < all_paths[i].size(); ++j)
+                    {
+                        geometry_msgs::PoseStamped new_pose;
+                        new_pose.header = header;
+                        new_pose.pose.position.x = all_paths[i][j].x * map.resolution + map.origin.position.x;
+                        new_pose.pose.position.y = all_paths[i][j].y * map.resolution + map.origin.position.y;
+                        new_pose.pose.position.z = 0;
+
+                        //TODO: Set orientation of intermediate poses
+                        new_pose.pose.orientation.w = 1;
+
+                        all_paths_meters[i].push_back(new_pose);
+
+                        if (publish_all_path_markers)
+                            marker.points.push_back(new_pose.pose.position);
+                    }
+
+                    //Adjust orientation of start and end positions
+                    if (!all_paths_meters[i].empty())
+                    {
+                        all_paths_meters[i][0] = start;
+                        all_paths_meters[i].back() = goal;
+                    }
+
+                    if (publish_all_path_markers)
+                        marker_array.markers.push_back(marker);
+                }
+
+                //Publish visualization for all available paths
+                if (publish_all_path_markers)
+                    all_paths_pub.publish(marker_array);
+
+                //Select the path most similar to user commanded velocity path
+                int preferred_path = 0;
+                double dist = pow(start.pose.position.x - goal.pose.position.x, 2) + pow(start.pose.position.y - goal.pose.position.y, 2);
+                if ((cmd_vel.linear.x != 0.0 || cmd_vel.angular.z != 0.0) && dist > pow(near_goal_threshold, 2))
+                    preferred_path = getMatchedPath(start, all_paths_meters);
+
+                //Select path that is most similar to previously selected path using dynamic time warping library if no user direction specified
+                else if (!prev_path.empty())
+                {
+                    auto start = std::chrono::system_clock::now();
+                    //Convert previously selected path into a time series
+                    fastdtw::TimeSeries<double, 1> prev_path_series;
+                    prev_path_series.addLast(0, fastdtw::TimeSeriesPoint<double, 1>(&prev_path[0].pose.position.x));
+
+                    double min_cost = std::numeric_limits<double>::infinity();
+                    double sum_dist = 0;
+
+                    //Loop up until 2nd last point for previous path
+                    for (int i = 1; i < prev_path.size(); ++i)
+                    {
+                        //Set time to be cumulative squared distance along the path
+                        double sqr = pow(prev_path[i].pose.position.x - prev_path[i - 1].pose.position.x, 2) +
+                                     pow(prev_path[i].pose.position.y - prev_path[i - 1].pose.position.y, 2);
+
+                        //Ensure that distance along path is an increasing value, otherwise addLast will call assert(false)
+                        if (sqr == 0.0)
+                            continue;
+
+                        sum_dist += sqr;
+                        prev_path_series.addLast(sum_dist, fastdtw::TimeSeriesPoint<double, 1>(&prev_path[i].pose.position.x));
+                    }
+
+                    //Loop through all generated paths to find potential one
+                    for (int i = 0; i < all_paths_meters.size(); ++i)
+                    {
+                        fastdtw::TimeSeries<double, 1> temp_path_series;
+                        temp_path_series.addLast(0, fastdtw::TimeSeriesPoint<double, 1>(&all_paths_meters[i][0].pose.position.x));
+
+                        sum_dist = 0;
+                        for (int j = 1; j < all_paths_meters[i].size(); ++j)
+                        {
+                            //Set time to be cumulative squared distance along the path
+                            double sqr = pow(all_paths_meters[i][j].pose.position.x - all_paths_meters[i][j - 1].pose.position.x, 2) +
+                                         pow(all_paths_meters[i][j].pose.position.y - all_paths_meters[i][j - 1].pose.position.y, 2);
+
+                            //Ensure that distance along path is an increasing value, otherwise addLast will call assert(false)
+                            if (sqr == 0.0)
+                                continue;
+
+                            sum_dist += sqr;
+                            temp_path_series.addLast(sum_dist, fastdtw::TimeSeriesPoint<double, 1>(&all_paths_meters[i][j].pose.position.x));
+                        }
+
+                        fastdtw::TimeWarpInfo<double> info = fastdtw::FAST::getWarpInfoBetween(prev_path_series, temp_path_series, fastdtw::EuclideanDistance());
+
+                        if (info.getDistance() < min_cost)
+                        {
+                            min_cost = info.getDistance();
+                            preferred_path = i;
+                        }
+                    }
+
+                    if (print_timings)
+                        std::cout << "DTW time: " << (std::chrono::system_clock::now() - start).count() / 1000000000.0 << "\n";
+                }
+
+                //Set selected plan
+                if (!all_paths_meters[preferred_path].empty())
+                    plan = all_paths_meters[preferred_path];
+
+                //Publish selected plan for visualization
+                nav_msgs::Path viz_path;
+                viz_path.header.stamp = ros::Time::now();
+                viz_path.header.frame_id = map.frame_id;
+                viz_path.poses = all_paths_meters[preferred_path];
+                global_path_pub.publish(viz_path);
+                prev_path = plan;
+
+                return true;
+            }
+
+            else
+                return false;
+        }
     }
 
     int SharedVoronoiGlobalPlanner::getMatchedPath(const geometry_msgs::PoseStamped &curr_pose,
@@ -462,6 +480,14 @@ namespace shared_voronoi_global_planner
         double dot = vec1[0] * vec2[0] + vec1[1] * vec2[1];
         double det = vec1[0] * vec2[1] - vec1[1] * vec2[0];
         return std::atan2(det, dot);
+    }
+
+    void SharedVoronoiGlobalPlanner::moveBaseStatusCB(const actionlib_msgs::GoalStatusArray::ConstPtr &msg)
+    {
+        //move_base 1 when active, 3 when complete
+        //Clear previous paths if move_base is not running anymore
+        if (msg->status_list.back().status != 1)
+            voronoi_path.clearPreviousPaths();
     }
 
     void SharedVoronoiGlobalPlanner::localCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg)

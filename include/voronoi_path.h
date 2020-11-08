@@ -217,6 +217,18 @@ namespace voronoi_path
         bool bezierInterp(std::vector<std::vector<GraphNode>>& paths);
 
         /**
+         * Clear the vector storing all previous paths
+         * @return boolean indicating success
+         **/
+        bool clearPreviousPaths();
+
+        /**
+         * Check if there are previous paths
+         * @return boolean indicating result
+         **/
+        bool hasPreviousPaths();
+
+        /**
          * Pixel resolution to increment when checking if an edge collision occurs. Value of 0.1 means the edge will
          * be checked at every 0.1 pixel intervals
          **/
@@ -349,6 +361,13 @@ namespace voronoi_path
          * values increases the likelihood of integer overflow
          **/
         int bezier_max_n = 26;
+
+        /**
+         * Vector to store all previously found paths for maintaining and trimming
+         **/
+        std::vector<std::vector<GraphNode>> previous_paths;
+
+        //******************* Methods *******************/
 
         /**
          * Find centroid of obstacles using opencv findContour(), uses data from 'map' variable

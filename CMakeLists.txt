@@ -20,6 +20,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf2
   visualization_msgs
   fast_dtw
+  actionlib_msgs
 )
 
 find_package(OpenCV 3 REQUIRED)
