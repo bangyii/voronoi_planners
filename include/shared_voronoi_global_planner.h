@@ -14,6 +14,7 @@
 #include <base_local_planner/costmap_model.h>
 #include <chrono>
 #include <memory>
+#include <mutex>
 
 #ifndef SHARED_VORONOI_GLOBAL_PLANNER_H
 #define SHARED_VORONOI_GLOBAL_PLANNER_H
@@ -146,6 +147,7 @@ namespace shared_voronoi_global_planner
         std::string joystick_topic = "/test_vel";
         bool visualize_edges = false;
         bool subscribe_local_costmap = true;
+        int preferred_path = 0;
         
         std::vector<std::pair<int, int>> map_pixels_backup;
 

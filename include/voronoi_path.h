@@ -204,6 +204,11 @@ namespace voronoi_path
         std::vector<std::vector<GraphNode>> getPath(const GraphNode &start, const GraphNode &end, const int &num_paths);
 
         /**
+         * Replan based on paths generated in the previous time step
+         **/
+        std::vector<std::vector<GraphNode>> replan(const GraphNode &start);
+
+        /**
          * Set the location of local vertices. Vertices are in pixels, in global map's frame
          * @param vertices vector containing the 4 corners of local costmap
          **/
