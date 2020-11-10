@@ -379,12 +379,12 @@ namespace voronoi_path
     bool voronoi_path::trimPathBeginning(std::vector<GraphNode> &path)
     {
         std::vector<GraphNode> path_copy = path;
-        double cum_distance_sq = 0;
+        // double cum_distance_sq = 0;
         int i = 1;
         //Trim nodes except start and end nodes
         for (i = 1; i < path.size() - 1; ++i)
         {
-            cum_distance_sq += pow(path[i].x - path[i - 1].x, 2) + pow(path[i].y - path[i - 1].y, 2);
+            // cum_distance_sq += pow(path[i].x - path[i - 1].x, 2) + pow(path[i].y - path[i - 1].y, 2);
 
             if (edgeCollides(path[0], path[i + 1]))
                 break;
@@ -397,15 +397,15 @@ namespace voronoi_path
             --i;
         }
 
-        //Find the halfpoint distance of the original path and then add that node to ensure smooth path
-        double half_distance = 0;
-        for (i = 1; i < path_copy.size(); ++i)
-        {
-            half_distance += pow(path_copy[i].x - path_copy[i - 1].x, 2) + pow(path_copy[i].y - path_copy[i - 1].y, 2);
+        // //Find the halfpoint distance of the original path and then add that node to ensure smooth path
+        // double half_distance = 0;
+        // for (i = 1; i < path_copy.size(); ++i)
+        // {
+        //     half_distance += pow(path_copy[i].x - path_copy[i - 1].x, 2) + pow(path_copy[i].y - path_copy[i - 1].y, 2);
 
-            if (half_distance > cum_distance_sq / 4.0)
-                break;
-        }
+        //     if (half_distance > cum_distance_sq / 4.0)
+        //         break;
+        // }
 
         return true;
     }
@@ -491,18 +491,27 @@ namespace voronoi_path
         std::vector<std::vector<GraphNode>> replanned_paths(previous_paths.size());
         for (int i = 0; i < previous_paths.size(); ++i)
         {
-            GraphNode previous_end = previous_paths[i][1];
+            // GraphNode previous_end = previous_paths[i][0];
 
-            //Use A* to get a path from previous_start to previous_end
-            std::vector<std::vector<GraphNode>> temp_path = getPath(start, previous_end, 1);
+            // //Use A* to get a path from previous_start to previous_end
+            // std::vector<std::vector<GraphNode>> temp_path = getPath(start, previous_end, 1);
 
-            //Append previous_path[i] to the back of temp_path
-            if (!temp_path.empty())
-            {
-                temp_path[0].insert(temp_path[0].end(), previous_paths[i].begin() + 1, previous_paths[i].end());
-                replanned_paths[i] = temp_path[0];
-                trimPathBeginning(replanned_paths[i]);
-            }
+            // //Append previous_path[i] to the back of temp_path
+            // if (!temp_path.empty())
+            // {
+            //     temp_path[0].insert(temp_path[0].end(), previous_paths[i].begin(), previous_paths[i].end());
+            //     replanned_paths[i] = temp_path[0];
+
+            //     //Trim paths because there will be uturns after appending
+            //     trimPathBeginning(replanned_paths[i]);
+            // }
+
+            // else 
+            //     return temp_path;
+
+            replanned_paths[i] = previous_paths[i];
+            replanned_paths[i].insert(replanned_paths[i].begin(), start);
+            trimPathBeginning(replanned_paths[i]);
         }
 
         previous_paths = replanned_paths;
@@ -1181,7 +1190,6 @@ namespace voronoi_path
         double increment = 1.0 / steps;
         double curr_step = 0.0;
 
-        //TODO: To double check to ensure curr_step always reaches 1.0
         while (curr_step <= 1.0)
         {
             curr_x = (1.0 - curr_step) * start.x + curr_step * end.x;
@@ -1191,6 +1199,7 @@ namespace voronoi_path
             try
             {
                 // if (map_ptr->data[pixel] > collision_threshold)
+                //FIXME: Remove usage of at() and implement another form of map data locking
                 if(map_ptr->data.at(pixel) > collision_threshold)
                 {
                     return true;
@@ -1199,6 +1208,7 @@ namespace voronoi_path
             
             catch(std::exception& e)
             {
+                std::cout << "Edge collides exception\n";
                 break;
             }
           
@@ -1313,6 +1323,8 @@ namespace voronoi_path
         {
             std::vector<GraphNode> bezier_path;
             int num_of_nodes = paths[j].size();
+            if(j == 0)
+                std::cout << "Path : " << j << "\n";
 
             std::vector<GraphNode> sub_nodes;
             std::vector<GraphNode> prev_2_nodes;
@@ -1358,6 +1370,8 @@ namespace voronoi_path
                     --i;
 
                     //Calculate the bezier subsection
+                    if(j == 0)
+                        std::cout << "Subsection size: " << sub_nodes.size() << "\n";
                     std::vector<GraphNode> temp_bezier = bezierSubsection(sub_nodes);
                     bezier_path.insert(bezier_path.end(), temp_bezier.begin(), temp_bezier.end());
 
