@@ -38,9 +38,6 @@ namespace shared_voronoi_global_planner
          **/
         nav_msgs::OccupancyGrid local_costmap;
 
-        std::vector<geometry_msgs::PoseStamped> prev_path;
-        std::vector<double> prev_path_double;
-
         /** 
          * Internal map which merges global and local costmap from ros
          **/
@@ -93,6 +90,16 @@ namespace shared_voronoi_global_planner
          * ROS's costmap inflation to prevent planner from planning in between narrow spaces
          **/
         int collision_threshold = 85;
+
+        /**
+         * Radius to search around robot location to try and find an empty cell to connect to start of previous path, meters
+         **/
+        double search_radius = 1.0;
+
+        /**
+         * Threshold used for trimming paths, should be smaller than collision_threshold to prevent robot from getting stuck
+         **/
+        int trimming_collision_threshold = 75;
 
         /**
          * Pixels to skip during the reading of map to generate voronoi graph. Increasing pixels to skip reduces computation time
@@ -148,6 +155,7 @@ namespace shared_voronoi_global_planner
         bool visualize_edges = false;
         bool subscribe_local_costmap = true;
         int preferred_path = 0;
+        voronoi_path::GraphNode prev_goal;
         
         std::vector<std::pair<int, int>> map_pixels_backup;
 
@@ -173,9 +181,27 @@ namespace shared_voronoi_global_planner
         void moveBaseStatusCB(const actionlib_msgs::GoalStatusArray::ConstPtr &msg);
         void globalCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg);
         void globalCostmapUpdateCB(const map_msgs::OccupancyGridUpdate::ConstPtr &msg);
-        void updateVoronoiCB(const ros::WallTimerEvent &e);
         void cmdVelCB(const geometry_msgs::Twist::ConstPtr &msg);
+
+        /**
+         * Callback for timer event to periodically update the voronoi diagram, if update_voronoi_rate is > 0
+         **/
+        void updateVoronoiCB(const ros::WallTimerEvent &e);
+
+        /**
+         * Get the closes matching path to the users' current joystick direction
+         * @param curr_pose the current pose of the robot
+         * @param plans_ all the plans to try to match the user's direction to
+         * @return integer index of the path that is the closes match in plans_ vector
+         **/
         int getMatchedPath(const geometry_msgs::PoseStamped &curr_pose, const std::vector<std::vector<geometry_msgs::PoseStamped>> &plans_);
+
+        /**
+         * Returns the minimum angle between two vectors
+         * @param vec1 an array of 2 doubles, x and y, of the first vector
+         * @param vec2 an array of 2 doubles, x and y, of the second vector
+         * @return minimum angle between the 2 vectors in rads
+         **/
         double vectorAngle(const double vec1[2], const double vec2[2]);
     };
 }; // namespace shared_voronoi_global_planner

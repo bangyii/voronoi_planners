@@ -206,7 +206,7 @@ namespace voronoi_path
         /**
          * Replan based on paths generated in the previous time step
          **/
-        std::vector<std::vector<GraphNode>> replan(const GraphNode &start);
+        std::vector<std::vector<GraphNode>> replan(GraphNode &start, GraphNode &end, int num_paths, int &pref_path);
 
         /**
          * Set the location of local vertices. Vertices are in pixels, in global map's frame
@@ -256,6 +256,15 @@ namespace voronoi_path
          **/
         int collision_threshold = 85;
 
+        /**
+         * Threshold used for trimming paths, should be smaller than collision_threshold to prevent robot from getting stuck
+         **/
+        int trimming_collision_threshold = 75;
+
+        /**
+         * Radius to search around robot location to try and find an empty cell to connect to start of previous path, meters
+         **/
+        double search_radius = 1.0;
         /**
          * Pixels to skip during the reading of map to generate voronoi graph. Increasing pixels to skip reduces computation time
          * of voronoi generation, but also reduces voronoi diagram density, likely causing path finding issues
@@ -451,7 +460,7 @@ namespace voronoi_path
          * @param end pixel position of end node
          * @return returns true if edge connecting start to end collides with obstacles
          **/
-        bool edgeCollides(const GraphNode &start, const GraphNode &end);
+        bool edgeCollides(const GraphNode &start, const GraphNode &end, int threshold);
 
         /**
          * Manhattan distance from a to b
@@ -498,6 +507,8 @@ namespace voronoi_path
          * @return complex value representing the homotopy class of path_
          **/
         std::complex<double> calcHomotopyClass(const std::vector<int> &path_);
+        
+        std::complex<double> calcHomotopyClass(const std::vector<GraphNode> &path_);
 
         /**
          * Trim the beginning of path such that the starting node is directly connected to the node before X,

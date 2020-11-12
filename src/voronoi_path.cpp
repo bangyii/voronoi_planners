@@ -40,7 +40,7 @@ namespace voronoi_path
             std::vector<std::vector<cv::Point>> contours;
             std::vector<cv::Vec4i> hierarchy;
             cv::Canny(cv_map, cv_map, 50, 150, 3);
-            cv::findContours(cv_map, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
+            cv::findContours(cv_map, contours, hierarchy, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
 
             //Get center of centroids
             std::vector<cv::Moments> mu(contours.size());
@@ -67,11 +67,10 @@ namespace voronoi_path
             double a = (centers.size() - 1) / 2.0;
             double b = a;
             obs_coeff.clear();
-            obs_coeff.resize(centers.size());
+            obs_coeff.resize(centers.size(), std::complex<double>(1, 1));
 
             std::complex<double> from_begin(1, 1);
             std::complex<double> from_end(1, 1);
-            // std::complex<double> al_denom_prod(1, 1);
             for (int i = 0; i < centers.size(); ++i)
             {
                 obs_coeff[i] *= from_begin;
@@ -379,33 +378,65 @@ namespace voronoi_path
     bool voronoi_path::trimPathBeginning(std::vector<GraphNode> &path)
     {
         std::vector<GraphNode> path_copy = path;
-        // double cum_distance_sq = 0;
+        GraphNode connected_point;
         int i = 1;
+
         //Trim nodes except start and end nodes
         for (i = 1; i < path.size() - 1; ++i)
         {
-            // cum_distance_sq += pow(path[i].x - path[i - 1].x, 2) + pow(path[i].y - path[i - 1].y, 2);
-
-            if (edgeCollides(path[0], path[i + 1]))
+            if (edgeCollides(path[0], path[i + 1], collision_threshold - 10))
                 break;
         }
 
-        auto delete_it = path.begin() + 1;
-        while (i > 1)
+        connected_point = path[i];
+
+        //Change paths that should be deleted into orthogonal projection onto the final line instead
+        auto node_to_remove = path.begin() + 1;
+        double gradient, inv_gradient;
+        try{
+            gradient = (path[0].y - connected_point.y) / (path[0].x - connected_point.x);
+            inv_gradient = -1.0/gradient;
+        }
+        catch(std::exception &e)
         {
-            delete_it = path.erase(delete_it);
-            --i;
+            std::cout << "Calculate gradient exception: " << e.what() << "\n";
         }
 
-        // //Find the halfpoint distance of the original path and then add that node to ensure smooth path
-        // double half_distance = 0;
-        // for (i = 1; i < path_copy.size(); ++i)
-        // {
-        //     half_distance += pow(path_copy[i].x - path_copy[i - 1].x, 2) + pow(path_copy[i].y - path_copy[i - 1].y, 2);
+        while(i > 1)
+        {
+            GraphNode ori_point = *node_to_remove;
+        
+            //y = mx + c =====> c = y - mx
+            //(a)x + (1)y = c =====> a = -m
+            double c1 = connected_point.y - gradient * connected_point.x;
+            double c2 = ori_point.y - inv_gradient * ori_point.x;
+            double a1 = -gradient;
+            double a2 = -inv_gradient;
+            double determinant = a1 - a2;
+            
+            double x = node_to_remove->x;
+            double y = node_to_remove->y;
 
-        //     if (half_distance > cum_distance_sq / 4.0)
-        //         break;
-        // }
+            if(determinant != 0)
+            {
+                x = (c1 - c2) / determinant;
+                y = (a1 * c2 - a2 * c1) / determinant;
+            }
+
+            //If point is not on segment between starting point and connected point, delete the point
+            if((x - connected_point.x) * (x - path[0].x) >= 0.0)
+            {
+                node_to_remove = path.erase(node_to_remove);
+                --i;
+                continue;
+            }
+
+            node_to_remove->x = x;
+            node_to_remove->y = y;
+            
+            ++node_to_remove;
+            --i;
+        }
 
         return true;
     }
@@ -481,8 +512,9 @@ namespace voronoi_path
         return path;
     }
 
-    std::vector<std::vector<GraphNode>> voronoi_path::replan(const GraphNode &start)
+    std::vector<std::vector<GraphNode>> voronoi_path::replan(GraphNode &start, GraphNode &end, int num_paths, int &pref_path)
     {
+        auto start_time = std::chrono::system_clock::now();
         if (previous_paths.empty())
             return previous_paths;
 
@@ -491,30 +523,120 @@ namespace voronoi_path
         std::vector<std::vector<GraphNode>> replanned_paths(previous_paths.size());
         for (int i = 0; i < previous_paths.size(); ++i)
         {
-            // GraphNode previous_end = previous_paths[i][0];
-
-            // //Use A* to get a path from previous_start to previous_end
-            // std::vector<std::vector<GraphNode>> temp_path = getPath(start, previous_end, 1);
-
-            // //Append previous_path[i] to the back of temp_path
-            // if (!temp_path.empty())
-            // {
-            //     temp_path[0].insert(temp_path[0].end(), previous_paths[i].begin(), previous_paths[i].end());
-            //     replanned_paths[i] = temp_path[0];
-
-            //     //Trim paths because there will be uturns after appending
-            //     trimPathBeginning(replanned_paths[i]);
-            // }
-
-            // else 
-            //     return temp_path;
-
             replanned_paths[i] = previous_paths[i];
+
+            //Search nearby area around robot to find an empty cell to connect to the previous path
+            if(edgeCollides(previous_paths[i][0], start, trimming_collision_threshold))
+            {
+                //Current radius in pixels
+                double current_radius = 1.0;
+
+                //Current angle in radians
+                double current_angle = 0;
+                double max_pix_radius = search_radius / map_ptr->resolution;
+                while(current_radius < max_pix_radius)
+                {
+                    current_angle = 0;
+                    while(current_angle < 2*M_PI)
+                    {
+                        double x = start.x + cos(current_angle) * current_radius;
+                        double y = start.y + sin(current_angle) * current_radius;
+
+                        GraphNode candidate_start(x, y);
+                        if(!edgeCollides(candidate_start, previous_paths[i][0], trimming_collision_threshold))
+                        {
+                            //TODO: Add buffer to reduce chances of path getting stuck
+                            start = candidate_start + GraphNode(cos(current_angle) * 3, sin(current_angle) * 3); 
+                            current_radius = max_pix_radius;
+                            break;
+                        }
+
+                        //TODO:: Angle increment should be dependant on current radius
+                        current_angle += 0.1;
+                    }
+
+                    current_radius += 1.0;
+                }
+
+                //No nearby empty cell found
+                if(current_angle >= 2*M_PI && current_radius >= max_pix_radius)
+                {
+                    std::cout << "WARN: No empty cell within search radius: " << search_radius << "\n";
+                    continue;
+                }
+            }
+
             replanned_paths[i].insert(replanned_paths[i].begin(), start);
             trimPathBeginning(replanned_paths[i]);
         }
 
+        //Explore for potential paths in new homotopy classes
+        std::vector<std::vector<GraphNode>> potential_paths = getPath(start, end, num_paths/2);
+        
+        //FIXME: This may take a lot of computation 
+        //Calculate homotopy class of paths and compare it with the previous set of paths
+        std::vector<std::complex<double>> previous_classes;
+        for(const auto& path : replanned_paths)
+            previous_classes.push_back(calcHomotopyClass(path));
+
+        //Paths within potential paths are guaranteed to be unique compared to each other
+        for(const auto& path : potential_paths)
+        {
+            std::complex<double> temp_class = calcHomotopyClass(path);
+            for(int k = 0; k < previous_classes.size(); ++k)
+            {
+                //Path is not unique
+                if (std::abs(temp_class - previous_classes[k]) / std::abs(temp_class) <= h_class_threshold)
+                    break;
+
+                //Path is unique since all paths have been checked
+                if(k == previous_classes.size() - 1)
+                    replanned_paths.push_back(path);
+            }
+        }
+
+        //If number of paths greater than num_paths, delete longest paths until equal
+        if(replanned_paths.size() > num_paths)
+        {
+            std::vector<double> all_paths_cost(replanned_paths.size());
+            for(int j = 0; j < replanned_paths.size(); ++j)
+            {
+                double total_cost = 0;
+                for(int i = 0; i < replanned_paths[j].size() - 1; ++i)
+                    total_cost += euclideanDist(replanned_paths[j][i], replanned_paths[j][i+1]);
+
+                all_paths_cost[j] = total_cost;
+            }
+
+            std::vector<GraphNode> chosen_path;
+            while(replanned_paths.size() > num_paths)
+            {
+                auto max_it = std::max_element(all_paths_cost.begin(), all_paths_cost.end());
+
+                //Decrememnt preferred path if a path before it has been deleted
+                int ind = std::distance(all_paths_cost.begin(), max_it);
+                if(ind < pref_path)
+                    --pref_path;
+
+                //Path to be deleted is the currently chosen path, store chosen path and then add back later
+                else if(ind == pref_path)
+                    chosen_path = replanned_paths[ind];
+                    // std::cout << "Deleted preferred path!\n";
+
+                replanned_paths.erase(replanned_paths.begin() + ind);
+                all_paths_cost.erase(max_it);
+            }
+
+            if(!chosen_path.empty())
+            {
+                std::cout << "Copied chosen path\n";
+                replanned_paths.insert(replanned_paths.begin() + pref_path, chosen_path);
+            }
+        }
+
         previous_paths = replanned_paths;
+        if(print_timings)
+            std::cout << "Total replan time: " << (std::chrono::system_clock::now() - start_time).count()/1000000000.0 << "\n";
         return replanned_paths;
     }
 
@@ -540,7 +662,7 @@ namespace voronoi_path
             temp_start_dist = pow(curr.x - start.x, 2) + pow(curr.y - start.y, 2);
             if (temp_start_dist < min_start_dist)
             {
-                if (!edgeCollides(start, curr))
+                if (!edgeCollides(start, curr, collision_threshold))
                 {
                     min_start_dist = temp_start_dist;
                     start_node = i;
@@ -550,7 +672,7 @@ namespace voronoi_path
             temp_end_dist = pow(curr.x - end.x, 2) + pow(curr.y - end.y, 2);
             if (temp_end_dist < min_end_dist)
             {
-                if (!edgeCollides(end, curr))
+                if (!edgeCollides(end, curr, collision_threshold))
                 {
                     min_end_dist = temp_end_dist;
                     end_node = i;
@@ -580,6 +702,77 @@ namespace voronoi_path
         //Convert path to complex path
         for (auto node : path_)
             path.emplace_back(node_inf[node].x, node_inf[node].y);
+
+        //Go through each edge of the path
+        std::complex<double> path_sum(0, 0);
+        int num_threads = std::thread::hardware_concurrency();
+        std::vector<std::future<std::complex<double>>> future_vector;
+        future_vector.reserve(num_threads);
+
+        int poses_per_thread = path.size() / num_threads;
+
+        for (int i = 0; i < num_threads; ++i)
+        {
+            int start_pose = i * poses_per_thread;
+
+            //Last thread takes remaining poses
+            if (i == num_threads - 1)
+                poses_per_thread = path.size() - poses_per_thread * (num_threads - 1);
+
+            future_vector.emplace_back(std::async(
+                std::launch::async,
+                [&, start_pose, poses_per_thread, path](const std::vector<std::complex<double>> &centers) {
+                    std::complex<double> thread_sum(0, 0);
+                    for (int i = start_pose + 1; i < start_pose + poses_per_thread + 1; i++)
+                    {
+                        std::complex<double> edge_sum(0, 0);
+
+                        if (i >= path.size())
+                            continue;
+
+                        //Each edge must iterate through all obstacles
+                        for (int j = 0; j < centers.size(); ++j)
+                        {
+                            double real_part = std::log(std::abs(path[i] - centers[j])) - std::log(std::abs(path[i - 1] - centers[j]));
+                            double im_part = std::arg(path[i] - centers[j]) - std::arg(path[i - 1] - centers[j]);
+
+                            //Get smallest angle
+                            while (im_part > M_PI)
+                                im_part -= 2 * M_PI;
+
+                            while (im_part < -M_PI)
+                                im_part += 2 * M_PI;
+
+                            edge_sum += (std::complex<double>(real_part, im_part) * obs_coeff[j]);
+                        }
+                        //Add this edge's sum to the path sum
+                        thread_sum += edge_sum;
+                    }
+
+                    return thread_sum;
+                },
+                std::ref(centers)));
+        }
+
+        for (int i = 0; i < future_vector.size(); ++i)
+        {
+            future_vector[i].wait();
+            std::complex<double> temp_sum = future_vector[i].get();
+            path_sum += temp_sum;
+        }
+
+        // std::cout << "Homotopy calc returning " << path_sum << "\n";
+        return path_sum;
+    }
+
+    std::complex<double> voronoi_path::calcHomotopyClass(const std::vector<GraphNode> &path_)
+    {
+        std::vector<std::complex<double>> path;
+        path.reserve(path_.size());
+
+        //Convert path to complex path
+        for (auto node : path_)
+            path.emplace_back(node.x, node.y);
 
         //Go through each edge of the path
         std::complex<double> path_sum(0, 0);
@@ -850,12 +1043,16 @@ namespace voronoi_path
             if (potentialKth.size() == 0)
                 break;
 
+            //Sort costs of paths
             std::sort(cost_index_vec.begin(), cost_index_vec.end());
 
+            //Check whether paths are unique, starting from lowest cost path, breaks when lowest cost path is unique
             auto it = cost_index_vec.begin();
             while (it != cost_index_vec.end())
             {
                 calc_homo_start = std::chrono::system_clock::now();
+
+                //Get homotopy class of the path that is currently being considered
                 std::complex<double> curr_h_class = calcHomotopyClass(potentialKth[it->second]);
                 calc_homotopy_cum_time += (std::chrono::system_clock::now() - calc_homo_start).count() / 1000000000.0;
 
@@ -1142,7 +1339,7 @@ namespace voronoi_path
             GraphNode start(curr_edge->pos[0].x, curr_edge->pos[0].y);
             GraphNode end(curr_edge->pos[1].x, curr_edge->pos[1].y);
 
-            if (edgeCollides(start, end))
+            if (edgeCollides(start, end, collision_threshold))
                 delete_indices.push_back(i);
         }
 
@@ -1174,7 +1371,7 @@ namespace voronoi_path
         return std::atan2(det, dot);
     }
 
-    bool voronoi_path::edgeCollides(const GraphNode &start, const GraphNode &end)
+    bool voronoi_path::edgeCollides(const GraphNode &start, const GraphNode &end, int threshold)
     {
         double steps = 0;
         double distance = sqrt(pow(start.x - end.x, 2) + pow(start.y - end.y, 2));
@@ -1196,22 +1393,15 @@ namespace voronoi_path
             curr_y = (1.0 - curr_step) * start.y + curr_step * end.y;
 
             pixel = int(curr_x) + int(curr_y) * map_ptr->width;
-            try
+            if(pixel < map_ptr->data.size())
             {
-                // if (map_ptr->data[pixel] > collision_threshold)
-                //FIXME: Remove usage of at() and implement another form of map data locking
-                if(map_ptr->data.at(pixel) > collision_threshold)
-                {
+                if(map_ptr->data.at(pixel) > threshold)
                     return true;
-                }
             }
-            
-            catch(std::exception& e)
-            {
-                std::cout << "Edge collides exception\n";
+
+            else
                 break;
-            }
-          
+            
             curr_step += increment;
         }
         return false;
@@ -1293,7 +1483,8 @@ namespace voronoi_path
             combos[i] = binomialCoeff(n, i);
 
         //Bezier interpolation
-        int num_points = 40;
+        //TODO: Number of points should scale according to path length
+        int num_points = 20;
         double incre = 1.0 / num_points;
         for (double t = 0; t <= 1.0 + 0.01; t += incre)
         {
@@ -1319,12 +1510,11 @@ namespace voronoi_path
         //Bezier interpolation
         //TODO: Can be threaded as well
         //For all paths, j = path number
+        bool had_failure = false;
         for (int j = 0; j < paths.size(); ++j)
         {
             std::vector<GraphNode> bezier_path;
             int num_of_nodes = paths[j].size();
-            if(j == 0)
-                std::cout << "Path : " << j << "\n";
 
             std::vector<GraphNode> sub_nodes;
             std::vector<GraphNode> prev_2_nodes;
@@ -1334,8 +1524,11 @@ namespace voronoi_path
             {
                 //If adjacent edges in original path collide, then something is wrong with map
                 //Return empty path because the original path has collision, not feasible
-                if (edgeCollides(paths[j][i - 1], paths[j][i]))
-                    return false;
+                if (edgeCollides(paths[j][i - 1], paths[j][i], collision_threshold))
+                {
+                    had_failure = true;
+                    break;
+                }
 
                 //Add previous node and extra node if sub_nodes was recently reset due to collision or initialization
                 if (sub_nodes.size() == 0)
@@ -1352,7 +1545,7 @@ namespace voronoi_path
                         sub_nodes.push_back(prev_2_nodes[1] + dir * extra_point_distance * map_ptr->resolution);
 
                         //Do not insert if collision occurs when extra point is added
-                        if (edgeCollides(sub_nodes[sub_nodes.size() - 2], sub_nodes.back()))
+                        if (edgeCollides(sub_nodes[sub_nodes.size() - 2], sub_nodes.back(), collision_threshold))
                             sub_nodes.pop_back();
 
                         prev_2_nodes.clear();
@@ -1360,7 +1553,7 @@ namespace voronoi_path
                 }
 
                 //If this node to the first node does not collide
-                if (!edgeCollides(sub_nodes[0], paths[j][i]) && sub_nodes.size() < bezier_max_n)
+                if (!edgeCollides(sub_nodes[0], paths[j][i], collision_threshold) && sub_nodes.size() < bezier_max_n)
                     sub_nodes.push_back(paths[j][i]);
 
                 //Collision happened or limit reached, find sub path with current sub nodes
@@ -1370,8 +1563,6 @@ namespace voronoi_path
                     --i;
 
                     //Calculate the bezier subsection
-                    if(j == 0)
-                        std::cout << "Subsection size: " << sub_nodes.size() << "\n";
                     std::vector<GraphNode> temp_bezier = bezierSubsection(sub_nodes);
                     bezier_path.insert(bezier_path.end(), temp_bezier.begin(), temp_bezier.end());
 
@@ -1390,10 +1581,12 @@ namespace voronoi_path
                 sub_nodes.clear();
             }
 
-            paths[j] = std::move(bezier_path);
+            //Return original path if there was interpolation failure
+            if(!had_failure)
+                paths[j] = std::move(bezier_path);
         }
 
-        return true;
+        return !had_failure;
     }
     bool voronoi_path::clearPreviousPaths()
     {

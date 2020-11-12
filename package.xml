@@ -63,7 +63,6 @@
   <depend>base_local_planner</depend>
   <depend>tf2</depend>
   <depend>visualization_msgs</depend>
-  <depend>fast_dtw</depend>
   <depend>actionlib_msgs</depend>
 
   <!-- The export tag contains other, unspecified, tags -->

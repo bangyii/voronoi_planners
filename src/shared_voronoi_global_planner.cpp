@@ -6,10 +6,6 @@
 #include <limits>
 #include <geometry_msgs/Point.h>
 
-#include "DTW.h"
-#include "FastDTW.h"
-#include "EuclideanDistance.h"
-
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 
@@ -29,11 +25,24 @@ namespace shared_voronoi_global_planner
 
     void SharedVoronoiGlobalPlanner::updateVoronoiCB(const ros::WallTimerEvent &e)
     {
-        //TODO: Race condition if voronoi update rate is 0, voronoi might not get a chance to initialize
-        if (map.data.empty())
+        if(update_voronoi_rate == 0)
         {
-            ROS_WARN("Map is still empty, skipping update of voronoi diagram");
-            return;
+            ros::Rate r(1);
+            while(map.data.empty())
+            {
+                ROS_WARN("Map is still empty, unable to update/initialize, waiting until map is not empty");
+                r.sleep();
+                ros::spinOnce();
+            }
+        }
+        
+        else
+        {
+            if (map.data.empty())
+            {
+                ROS_WARN("Map is still empty, skipping update of voronoi diagram");
+                return;
+            }
         }
 
         voronoi_path.mapToGraph(&map);
@@ -62,7 +71,6 @@ namespace shared_voronoi_global_planner
             marker.scale.x = 0.01;
             marker.color.a = 1.0;
             marker.color.b = 1.0;
-            marker.lifetime = ros::Duration(0.0);
             marker.pose.orientation.w = 1.0;
             marker.points.reserve(nodes.size());
 
@@ -90,7 +98,6 @@ namespace shared_voronoi_global_planner
             marker_lonely.scale.y = 0.1;
             marker_lonely.color.a = 1.0;
             marker_lonely.color.r = 1.0;
-            marker_lonely.lifetime = ros::Duration(0.0);
             marker_lonely.pose.orientation.w = 1.0;
             marker_lonely.points.reserve(lonely_nodes.size());
 
@@ -115,7 +122,6 @@ namespace shared_voronoi_global_planner
             marker_obstacles.scale.y = 0.2;
             marker_obstacles.color.a = 1.0;
             marker_obstacles.color.g = 1.0;
-            marker_obstacles.lifetime = ros::Duration(0.0);
             marker_obstacles.pose.orientation.w = 1.0;
             marker_obstacles.points.reserve(centers.size());
 
@@ -162,6 +168,8 @@ namespace shared_voronoi_global_planner
             nh.getParam("joy_max_ang", joy_max_ang);
             nh.getParam("trim_path_beginning", trim_path_beginning);
             nh.getParam("subscribe_local_costmap", subscribe_local_costmap);
+            nh.getParam("trimming_collision_threshold", trimming_collision_threshold);
+            nh.getParam("search_radius", search_radius);
 
             //Set parameters for voronoi path object
             voronoi_path.h_class_threshold = h_class_threshold;
@@ -170,23 +178,28 @@ namespace shared_voronoi_global_planner
             voronoi_path.extra_point_distance = extra_point_distance;
             voronoi_path.min_node_sep_sq = min_node_sep_sq;
             voronoi_path.trim_path_beginning = trim_path_beginning;
+            voronoi_path.trimming_collision_threshold = trimming_collision_threshold;
+            voronoi_path.search_radius = search_radius;
 
             //Subscribe and advertise related topics
             global_costmap_sub = nh.subscribe("/move_base/global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);
+
             global_update_sub = nh.subscribe("/move_base/global_costmap/costmap_updates", 1, &SharedVoronoiGlobalPlanner::globalCostmapUpdateCB, this);
             move_base_stat_sub = nh.subscribe("/move_base/status", 1, &SharedVoronoiGlobalPlanner::moveBaseStatusCB, this);
 
             if (subscribe_local_costmap)
                 local_costmap_sub = nh.subscribe("/move_base/local_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::localCostmapCB, this);
 
+            //Subscribe to joystick output to get direction selected by user
             user_vel_sub = nh.subscribe(joystick_topic, 1, &SharedVoronoiGlobalPlanner::cmdVelCB, this);
 
+            //Publisher for chosen path, all paths, user's indicated direction, and voronoi graph edges for visualization respectively
             global_path_pub = nh.advertise<nav_msgs::Path>("plan", 1);
             all_paths_pub = nh.advertise<visualization_msgs::MarkerArray>("all_paths", 1);
             user_direction_pub = nh.advertise<visualization_msgs::Marker>("user_direction", 1);
             edges_viz_pub = nh.advertise<visualization_msgs::MarkerArray>("voronoi_edges", 1);
 
-            //Create timer to update Voronoi diagram
+            //Create timer to update Voronoi diagram, use one shot timer if update rate is 0
             if(update_voronoi_rate != 0)
                 voronoi_update_timer = nh.createWallTimer(ros::WallDuration(1.0 / update_voronoi_rate), &SharedVoronoiGlobalPlanner::updateVoronoiCB, this);
             else
@@ -210,23 +223,32 @@ namespace shared_voronoi_global_planner
                                             (start.pose.position.y - map.origin.position.y) / map.resolution);
 
         //move_base had a goal previously set, so paths should be trimmed based on previous one instead of replanning entirely
-        if (voronoi_path.hasPreviousPaths())
+        if (voronoi_path.hasPreviousPaths() && prev_goal == end_point)
         {
-            all_paths = voronoi_path.replan(start_point);
+            all_paths = voronoi_path.replan(start_point, end_point, num_paths, preferred_path);
             if (!voronoi_path.bezierInterp(all_paths))
-                return true;
+            {                    
+                ROS_DEBUG("Bezier interpolation failed, original path already collides with obstacle");
+                // return true;
+            }
         }
 
         //move_base was not running, there are no previous paths. So planning should be done from scratch
         else
         {
-            //Get voronoi paths
+            //Clear all previous paths and preferences before getting new path
+            voronoi_path.clearPreviousPaths();
+            preferred_path = 0;
             all_paths = voronoi_path.getPath(start_point, end_point, num_paths);
 
+            //TODO: What is the purpose of this?
             //Smooth the path received from voronoi planner, return true when fail so the global planner can try replanning/update position
             if (!voronoi_path.bezierInterp(all_paths))
-                return true;
-
+            {                    
+                ROS_DEBUG("Bezier interpolation failed, original path already collides with obstacle");
+                // return true;
+            }
+            
             if (all_paths.size() < num_paths)
                 ROS_WARN("Could not find all requested paths. Requested: %d, found: %ld", num_paths, all_paths.size());
         }
@@ -243,7 +265,7 @@ namespace shared_voronoi_global_planner
             header.frame_id = map.frame_id;
             for (int i = 0; i < all_paths.size(); ++i)
             {
-                visualization_msgs::Marker marker;
+                visualization_msgs::Marker marker, points;
                 if (publish_all_path_markers)
                 {
                     //Create marker item to store a line
@@ -258,7 +280,19 @@ namespace shared_voronoi_global_planner
                     marker.color.b = (255 / all_paths.size() * i) / 255.0;
                     marker.color.a = 1.0;
                     marker.pose.orientation.w = 1.0;
-                    marker.lifetime = ros::Duration(1.0);
+                    marker.lifetime = ros::Duration(1.0);                   
+                    
+                    points.header = header;
+                    points.ns = std::string("Path points ") + std::to_string(i);
+                    points.id = i + all_paths.size();
+                    points.type = 8;
+                    points.action = 0;
+                    points.scale.x = 0.05;
+                    points.scale.y = 0.05;
+                    points.color.r = 1.0;
+                    points.color.a = 1.0;
+                    points.pose.orientation.w = 1.0;
+                    points.lifetime = ros::Duration(1.0);
                 }
 
                 //Loop through all the nodes for path i
@@ -276,11 +310,17 @@ namespace shared_voronoi_global_planner
                     all_paths_meters[i].push_back(new_pose);
 
                     if (publish_all_path_markers)
+                    {
                         marker.points.push_back(new_pose.pose.position);
+                        points.points.push_back(new_pose.pose.position);
+                    }
                 }
 
                 if (publish_all_path_markers)
+                {                        
                     marker_array.markers.push_back(marker);
+                    marker_array.markers.push_back(points);
+                }
 
                 //Adjust orientation of start and end positions
                 if (!all_paths_meters[i].empty())
@@ -299,67 +339,6 @@ namespace shared_voronoi_global_planner
             if ((cmd_vel.linear.x != 0.0 || cmd_vel.angular.z != 0.0) && dist > pow(near_goal_threshold, 2))
                 preferred_path = getMatchedPath(start, all_paths_meters);
 
-
-            // //Select path that is most similar to previously selected path using dynamic time warping library if no user direction specified
-            // else if (!prev_path.empty())
-            // {
-            //     auto start = std::chrono::system_clock::now();
-            //     //Convert previously selected path into a time series
-            //     fastdtw::TimeSeries<double, 1> prev_path_series;
-            //     prev_path_series.addLast(0, fastdtw::TimeSeriesPoint<double, 1>(&prev_path[0].pose.position.x));
-
-            //     double min_cost = std::numeric_limits<double>::infinity();
-            //     double sum_dist = 0;
-
-            //     //Loop up until 2nd last point for previous path
-            //     for (int i = 1; i < prev_path.size(); ++i)
-            //     {
-            //         //Set time to be cumulative squared distance along the path
-            //         double sqr = pow(prev_path[i].pose.position.x - prev_path[i - 1].pose.position.x, 2) +
-            //                      pow(prev_path[i].pose.position.y - prev_path[i - 1].pose.position.y, 2);
-
-            //         //Ensure that distance along path is an increasing value, otherwise addLast will call assert(false)
-            //         if (sqr == 0.0)
-            //             continue;
-
-            //         sum_dist += sqr;
-            //         prev_path_series.addLast(sum_dist, fastdtw::TimeSeriesPoint<double, 1>(&prev_path[i].pose.position.x));
-            //     }
-
-            //     //Loop through all generated paths to find potential one
-            //     for (int i = 0; i < all_paths_meters.size(); ++i)
-            //     {
-            //         fastdtw::TimeSeries<double, 1> temp_path_series;
-            //         temp_path_series.addLast(0, fastdtw::TimeSeriesPoint<double, 1>(&all_paths_meters[i][0].pose.position.x));
-
-            //         sum_dist = 0;
-            //         for (int j = 1; j < all_paths_meters[i].size(); ++j)
-            //         {
-            //             //Set time to be cumulative squared distance along the path
-            //             double sqr = pow(all_paths_meters[i][j].pose.position.x - all_paths_meters[i][j - 1].pose.position.x, 2) +
-            //                          pow(all_paths_meters[i][j].pose.position.y - all_paths_meters[i][j - 1].pose.position.y, 2);
-
-            //             //Ensure that distance along path is an increasing value, otherwise addLast will call assert(false)
-            //             if (sqr == 0.0)
-            //                 continue;
-
-            //             sum_dist += sqr;
-            //             temp_path_series.addLast(sum_dist, fastdtw::TimeSeriesPoint<double, 1>(&all_paths_meters[i][j].pose.position.x));
-            //         }
-
-            //         fastdtw::TimeWarpInfo<double> info = fastdtw::FAST::getWarpInfoBetween(prev_path_series, temp_path_series, fastdtw::EuclideanDistance());
-
-            //         if (info.getDistance() < min_cost)
-            //         {
-            //             min_cost = info.getDistance();
-            //             preferred_path = i;
-            //         }
-            //     }
-
-            //     if (print_timings)
-            //         std::cout << "DTW time: " << (std::chrono::system_clock::now() - start).count() / 1000000000.0 << "\n";
-            // }
-
             //Set selected plan
             if (all_paths_meters.size() > preferred_path)
                 plan = all_paths_meters[preferred_path];
@@ -370,7 +349,7 @@ namespace shared_voronoi_global_planner
             viz_path.header.frame_id = map.frame_id;
             viz_path.poses = plan;
             global_path_pub.publish(viz_path);
-            // prev_path = plan;
+            prev_goal = end_point;
 
             return true;
         }
@@ -558,7 +537,7 @@ namespace shared_voronoi_global_planner
 
     void SharedVoronoiGlobalPlanner::globalCostmapUpdateCB(const map_msgs::OccupancyGridUpdate::ConstPtr &msg)
     {
-        //Assign update of map data to local map copy
+        //Assign update of map data to local copy of map
         map.data = msg->data;
 
         //Call local costmap cb to make sure that local obstacles are not overwritten by global costmap update

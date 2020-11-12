@@ -19,7 +19,6 @@ find_package(catkin REQUIRED COMPONENTS
   costmap_2d
   tf2
   visualization_msgs
-  fast_dtw
   actionlib_msgs
 )
 
