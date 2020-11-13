@@ -147,11 +147,10 @@ namespace shared_voronoi_global_planner
         double forward_sim_time = 1.0;       //s
         double forward_sim_resolution = 0.1; //m
         double near_goal_threshold = 1.0;
-        bool add_local_costmap_corners = true;
+        double selection_threshold = 1.2;
+        bool add_local_costmap_corners = false;
         bool publish_all_path_markers = false;
-        double user_dir_filter = 0.9;
-        double prev_local_dir = 0.0;
-        std::string joystick_topic = "/test_vel";
+        std::string joystick_topic = "/joy_vel";
         bool visualize_edges = false;
         bool subscribe_local_costmap = true;
         int preferred_path = 0;

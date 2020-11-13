@@ -159,7 +159,6 @@ namespace shared_voronoi_global_planner
             nh.getParam("forward_sim_time", forward_sim_time);
             nh.getParam("num_paths", num_paths);
             nh.getParam("publish_all_path_markers", publish_all_path_markers);
-            nh.getParam("user_dir_filter", user_dir_filter);
             nh.getParam("joystick_topic", joystick_topic);
             nh.getParam("visualize_edges", visualize_edges);
             nh.getParam("node_connection_threshold_pix", node_connection_threshold_pix);
@@ -170,6 +169,7 @@ namespace shared_voronoi_global_planner
             nh.getParam("subscribe_local_costmap", subscribe_local_costmap);
             nh.getParam("trimming_collision_threshold", trimming_collision_threshold);
             nh.getParam("search_radius", search_radius);
+            nh.getParam("selection_threshold", selection_threshold);
 
             //Set parameters for voronoi path object
             voronoi_path.h_class_threshold = h_class_threshold;
@@ -396,9 +396,7 @@ namespace shared_voronoi_global_planner
         if (normalized_lin > 1)
             normalized_lin = 1;
 
-        double new_local_dir = user_dir_filter * atan2(normalized_ang, normalized_lin) + (1 - user_dir_filter) * prev_local_dir;
-        double theta = tf::getYaw(curr_pose.pose.orientation) + new_local_dir;
-        prev_local_dir = new_local_dir;
+        double theta = tf::getYaw(curr_pose.pose.orientation) + atan2(normalized_ang, normalized_lin);
 
         user_path.emplace_back(x, y);
 
@@ -424,11 +422,10 @@ namespace shared_voronoi_global_planner
 
         user_direction_pub.publish(marker);
 
-        double total_distance = sqrt(pow(user_path.back().first - user_path[0].first, 2) +
-                                     pow(user_path.back().second - user_path[0].second, 2));
+        double max_s = sqrt(pow(user_path.back().first - user_path[0].first, 2) +
+                            pow(user_path.back().second - user_path[0].second, 2));
 
         std::vector<double> ang_diff_sq(plans_.size(), 0);
-        double max_s = total_distance;
 
         double vec1[] = {user_path.back().first - user_path[0].first,
                          user_path.back().second - user_path[0].second};
@@ -456,7 +453,16 @@ namespace shared_voronoi_global_planner
             }
         }
 
-        return std::min_element(ang_diff_sq.begin(), ang_diff_sq.end()) - ang_diff_sq.begin();
+        //If the angular difference of a path is greater than selection_threshold%, change cost to infinity
+        std::vector<double> total_costs = voronoi_path.getAllPathCosts();
+        double min_val = *std::min_element(ang_diff_sq.begin(), ang_diff_sq.end());
+        for(int i = 0; i < ang_diff_sq.size(); ++i)
+        {
+            if(ang_diff_sq[i] / min_val >= selection_threshold)
+                total_costs[i] = std::numeric_limits<double>::infinity();
+        }
+
+        return std::min_element(total_costs.begin(), total_costs.end()) - total_costs.begin();
     }
 
     double SharedVoronoiGlobalPlanner::vectorAngle(const double vec1[2], const double vec2[2])

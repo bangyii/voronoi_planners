@@ -176,6 +176,12 @@ namespace voronoi_path
         bool getObstacleCentroids(std::vector<GraphNode> &centroids);
 
         /**
+         * Get the costs of all paths 
+         * @return vector containing all the costs
+         **/
+        std::vector<double> getAllPathCosts();
+
+        /**
          * Gets voronoi graph from map_
          * @param map_ map to use for generation of voronoi graph
          * @return boolean indicating success
@@ -264,7 +270,7 @@ namespace voronoi_path
         /**
          * Radius to search around robot location to try and find an empty cell to connect to start of previous path, meters
          **/
-        double search_radius = 1.0;
+        double search_radius = 1.5;
         /**
          * Pixels to skip during the reading of map to generate voronoi graph. Increasing pixels to skip reduces computation time
          * of voronoi generation, but also reduces voronoi diagram density, likely causing path finding issues
@@ -380,6 +386,11 @@ namespace voronoi_path
          * Vector to store all previously found paths for maintaining and trimming
          **/
         std::vector<std::vector<GraphNode>> previous_paths;
+
+        /**
+         * Vector storing all the costs of previous paths
+         **/
+        std::vector<double> previous_path_costs;
 
         //******************* Methods *******************/
 
@@ -502,13 +513,18 @@ namespace voronoi_path
 
         /**
          * Calculate the homotopy class, algorithm from paper "Search-Based Path Planning with Homotopy Class Constraints"
-         * by Subhrajit Bhattacharya et al
+         * by Subhrajit Bhattacharya et al https://www.cs.huji.ac.il/~jeff/aaai10/02/AAAI10-216.pdf
          * @param path_ path to calculate homotopy class
          * @return complex value representing the homotopy class of path_
          **/
-        std::complex<double> calcHomotopyClass(const std::vector<int> &path_);
-        
         std::complex<double> calcHomotopyClass(const std::vector<GraphNode> &path_);
+
+        /**
+         * Convert node based path to pixel based path
+         * @param path_ path to be converted, will not be modified
+         * @return Vector containing pixels of the path
+         **/
+        std::vector<GraphNode> convertToPixelPath(const std::vector<int> &path_);
 
         /**
          * Trim the beginning of path such that the starting node is directly connected to the node before X,

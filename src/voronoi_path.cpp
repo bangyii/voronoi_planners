@@ -9,7 +9,7 @@
 
 namespace voronoi_path
 {
-    voronoi_path::voronoi_path() 
+    voronoi_path::voronoi_path()
     {
     }
 
@@ -325,6 +325,11 @@ namespace voronoi_path
         return true;
     }
 
+    std::vector<double> voronoi_path::getAllPathCosts()
+    {
+        return previous_path_costs;
+    }
+
     bool voronoi_path::getEdges(std::vector<GraphNode> &edges)
     {
         std::lock_guard<std::mutex> lock(voronoi_mtx);
@@ -393,19 +398,20 @@ namespace voronoi_path
         //Change paths that should be deleted into orthogonal projection onto the final line instead
         auto node_to_remove = path.begin() + 1;
         double gradient, inv_gradient;
-        try{
+        try
+        {
             gradient = (path[0].y - connected_point.y) / (path[0].x - connected_point.x);
-            inv_gradient = -1.0/gradient;
+            inv_gradient = -1.0 / gradient;
         }
-        catch(std::exception &e)
+        catch (std::exception &e)
         {
             std::cout << "Calculate gradient exception: " << e.what() << "\n";
         }
 
-        while(i > 1)
+        while (i > 1)
         {
             GraphNode ori_point = *node_to_remove;
-        
+
             //y = mx + c =====> c = y - mx
             //(a)x + (1)y = c =====> a = -m
             double c1 = connected_point.y - gradient * connected_point.x;
@@ -413,18 +419,18 @@ namespace voronoi_path
             double a1 = -gradient;
             double a2 = -inv_gradient;
             double determinant = a1 - a2;
-            
+
             double x = node_to_remove->x;
             double y = node_to_remove->y;
 
-            if(determinant != 0)
+            if (determinant != 0)
             {
                 x = (c1 - c2) / determinant;
                 y = (a1 * c2 - a2 * c1) / determinant;
             }
 
             //If point is not on segment between starting point and connected point, delete the point
-            if((x - connected_point.x) * (x - path[0].x) >= 0.0)
+            if ((x - connected_point.x) * (x - path[0].x) >= 0.0)
             {
                 node_to_remove = path.erase(node_to_remove);
                 --i;
@@ -433,7 +439,7 @@ namespace voronoi_path
 
             node_to_remove->x = x;
             node_to_remove->y = y;
-            
+
             ++node_to_remove;
             --i;
         }
@@ -478,7 +484,6 @@ namespace voronoi_path
             //Copy all_paths into new container which include start and end
             std::vector<std::vector<GraphNode>> all_path_nodes;
             all_path_nodes.reserve(all_paths.size());
-
             for (int i = 0; i < all_paths.size(); ++i)
             {
                 all_path_nodes.push_back(std::vector<GraphNode>{start});
@@ -494,16 +499,26 @@ namespace voronoi_path
                     trimPathBeginning(all_path_nodes[i]);
             }
 
-            //TODO: Fix this lame solution
-            if(!hasPreviousPaths())
+            //Only set previous paths and their costs if this was the first call
+            if (!hasPreviousPaths())
+            {
                 previous_paths = all_path_nodes;
+                previous_path_costs.resize(all_path_nodes.size());
+
+                for (int j = 0; j < all_path_nodes.size(); ++j)
+                {
+                    double total_cost = 0;
+                    for (int i = 0; i < all_path_nodes[j].size() - 1; ++i)
+                        total_cost += euclideanDist(all_path_nodes[j][i], all_path_nodes[j][i + 1]);
+
+                    previous_path_costs[j] = total_cost;
+                }
+            }
 
             path = std::move(all_path_nodes);
 
             if (print_timings)
-            {
                 std::cout << "Find all paths, including time to find nearest node: \t" << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << "s\n";
-            }
         }
 
         else
@@ -518,125 +533,172 @@ namespace voronoi_path
         if (previous_paths.empty())
             return previous_paths;
 
-        //Replan, from current position to the second position of the previous path, second position because first position was previous
-        //time step's robot location
-        std::vector<std::vector<GraphNode>> replanned_paths(previous_paths.size());
-        for (int i = 0; i < previous_paths.size(); ++i)
+        // std::vector<std::vector<GraphNode>> replanned_paths(previous_paths);
+        // //Check robot's current position to previous paths' first pose causes collision
+        // //Current radius in pixels and angle in radians
+        // double current_radius = 1.0, current_angle = 0;
+        // double max_pix_radius = search_radius / map_ptr->resolution;
+        // if(edgeCollides(previous_paths[0][0], start, trimming_collision_threshold))
+        // {
+        //     //Collision occurs, search area around robot to find empty cell to replace as start pose
+        //     while (current_radius < max_pix_radius)
+        //     {
+        //         current_angle = 0;
+        //         while (current_angle <= 2 * M_PI)
+        //         {
+        //             double x = start.x + cos(current_angle) * current_radius;
+        //             double y = start.y + sin(current_angle) * current_radius;
+
+        //             GraphNode candidate_start(x, y);
+        //             if (!edgeCollides(candidate_start, previous_paths[0][0], trimming_collision_threshold))
+        //             {
+        //                 //TODO: Add tunable buffer to reduce chances of path getting stuck
+        //                 start = candidate_start + GraphNode(cos(current_angle) * 3, sin(current_angle) * 3);
+        //                 current_radius = max_pix_radius;
+        //                 break;
+        //             }
+
+        //             //TODO:: Angle increment should be dependant on current radius
+        //             current_angle += 0.1;
+        //         }
+
+        //         current_radius += 1.0;
+        //     }
+        // }
+
+        // //Nearby empty cell not found, since angle limits have been reached yet
+        // if (current_angle > 2 * M_PI)
+        //     std::cout << "WARN: No empty cell within search radius: " << search_radius << "m\n";
+
+        // for (int i = 0; i < previous_paths.size(); ++i)
+        // {
+        //     trimPathBeginning(replanned_paths[i]);
+        //     replanned_paths[i].insert(replanned_paths[i].begin(), start);
+        // }
+
+        // Replan, from current position to the first position of previous path
+        std::vector<std::vector<GraphNode>> replanned_paths(previous_paths);
+        for (int i = 0; i < replanned_paths.size(); ++i)
         {
-            replanned_paths[i] = previous_paths[i];
-
             //Search nearby area around robot to find an empty cell to connect to the previous path
-            if(edgeCollides(previous_paths[i][0], start, trimming_collision_threshold))
+            //FIXME: For some reason, if collision is found and a new start point is found, some 
+            //paths still have collision with the new start point, even tho theoretically all first poses
+            //in previous paths should be identical
+            if (edgeCollides(previous_paths[i][0], start, trimming_collision_threshold))
             {
-                //Current radius in pixels
-                double current_radius = 1.0;
-
-                //Current angle in radians
-                double current_angle = 0;
+                //Current radius in pixels and angle in rads
+                double current_radius = 1.0, current_angle = 0;
                 double max_pix_radius = search_radius / map_ptr->resolution;
-                while(current_radius < max_pix_radius)
+                bool found_new_start = false;
+                while (current_radius <= max_pix_radius && !found_new_start)
                 {
                     current_angle = 0;
-                    while(current_angle < 2*M_PI)
+                    // s = r(theta), solve theta such that s == 1, 1 pixel 
+                    double increment = 1.0 / current_radius;
+                    while (current_angle < 2 * M_PI && !found_new_start)
                     {
                         double x = start.x + cos(current_angle) * current_radius;
                         double y = start.y + sin(current_angle) * current_radius;
 
                         GraphNode candidate_start(x, y);
-                        if(!edgeCollides(candidate_start, previous_paths[i][0], trimming_collision_threshold))
+                        if (!edgeCollides(candidate_start, previous_paths[i][0], trimming_collision_threshold))
                         {
                             //TODO: Add buffer to reduce chances of path getting stuck
-                            start = candidate_start + GraphNode(cos(current_angle) * 3, sin(current_angle) * 3); 
-                            current_radius = max_pix_radius;
-                            break;
+                            start = candidate_start + GraphNode(cos(current_angle) * 3, sin(current_angle) * 3);
+                            found_new_start = true;
                         }
 
-                        //TODO:: Angle increment should be dependant on current radius
-                        current_angle += 0.1;
+                        current_angle += increment;
                     }
 
                     current_radius += 1.0;
                 }
 
                 //No nearby empty cell found
-                if(current_angle >= 2*M_PI && current_radius >= max_pix_radius)
+                if (!found_new_start)
                 {
-                    std::cout << "WARN: No empty cell within search radius: " << search_radius << "\n";
-                    continue;
+                    std::cout << "WARN: No empty cell within search radius: " << search_radius << "m\n";
+                    // continue;
                 }
             }
 
+            //No insert and trim if a nearby empty cell is not found
             replanned_paths[i].insert(replanned_paths[i].begin(), start);
             trimPathBeginning(replanned_paths[i]);
         }
 
         //Explore for potential paths in new homotopy classes
-        std::vector<std::vector<GraphNode>> potential_paths = getPath(start, end, num_paths/2);
-        
-        //FIXME: This may take a lot of computation 
+        std::vector<std::vector<GraphNode>> potential_paths = getPath(start, end, num_paths / 2);
+
+        //FIXME: This may take a lot of computation
         //Calculate homotopy class of paths and compare it with the previous set of paths
         std::vector<std::complex<double>> previous_classes;
-        for(const auto& path : replanned_paths)
+        for (const auto &path : replanned_paths)
             previous_classes.push_back(calcHomotopyClass(path));
 
         //Paths within potential paths are guaranteed to be unique compared to each other
-        for(const auto& path : potential_paths)
+        for (const auto &path : potential_paths)
         {
             std::complex<double> temp_class = calcHomotopyClass(path);
-            for(int k = 0; k < previous_classes.size(); ++k)
+            for (int k = 0; k < previous_classes.size(); ++k)
             {
                 //Path is not unique
                 if (std::abs(temp_class - previous_classes[k]) / std::abs(temp_class) <= h_class_threshold)
                     break;
 
                 //Path is unique since all paths have been checked
-                if(k == previous_classes.size() - 1)
+                if (k == previous_classes.size() - 1)
                     replanned_paths.push_back(path);
             }
         }
 
         //If number of paths greater than num_paths, delete longest paths until equal
-        if(replanned_paths.size() > num_paths)
+        std::vector<double> all_paths_cost(replanned_paths.size());
+        for (int j = 0; j < replanned_paths.size(); ++j)
         {
-            std::vector<double> all_paths_cost(replanned_paths.size());
-            for(int j = 0; j < replanned_paths.size(); ++j)
-            {
-                double total_cost = 0;
-                for(int i = 0; i < replanned_paths[j].size() - 1; ++i)
-                    total_cost += euclideanDist(replanned_paths[j][i], replanned_paths[j][i+1]);
+            double total_cost = 0;
+            for (int i = 0; i < replanned_paths[j].size() - 1; ++i)
+                total_cost += euclideanDist(replanned_paths[j][i], replanned_paths[j][i + 1]);
 
-                all_paths_cost[j] = total_cost;
-            }
-
-            std::vector<GraphNode> chosen_path;
-            while(replanned_paths.size() > num_paths)
-            {
-                auto max_it = std::max_element(all_paths_cost.begin(), all_paths_cost.end());
-
-                //Decrememnt preferred path if a path before it has been deleted
-                int ind = std::distance(all_paths_cost.begin(), max_it);
-                if(ind < pref_path)
-                    --pref_path;
-
-                //Path to be deleted is the currently chosen path, store chosen path and then add back later
-                else if(ind == pref_path)
-                    chosen_path = replanned_paths[ind];
-                    // std::cout << "Deleted preferred path!\n";
-
-                replanned_paths.erase(replanned_paths.begin() + ind);
-                all_paths_cost.erase(max_it);
-            }
-
-            if(!chosen_path.empty())
-            {
-                std::cout << "Copied chosen path\n";
-                replanned_paths.insert(replanned_paths.begin() + pref_path, chosen_path);
-            }
+            all_paths_cost[j] = total_cost;
         }
 
+        std::vector<GraphNode> chosen_path;
+        double chosen_cost;
+        while (replanned_paths.size() > num_paths)
+        {
+            auto max_it = std::max_element(all_paths_cost.begin(), all_paths_cost.end());
+
+            //Decrememnt preferred path if a path before it has been deleted
+            int ind = std::distance(all_paths_cost.begin(), max_it);
+            if (ind < pref_path)
+                --pref_path;
+
+            //Path to be deleted is the currently chosen path, store chosen path and then add back later
+            else if (ind == pref_path)
+            {
+                chosen_cost = *max_it;
+                chosen_path = replanned_paths[ind];
+            }
+
+            replanned_paths.erase(replanned_paths.begin() + ind);
+            all_paths_cost.erase(max_it);
+        }
+
+        //If chosen path was erased in the while block above, restore it
+        if (!chosen_path.empty())
+        {
+            replanned_paths.insert(replanned_paths.begin() + pref_path, chosen_path);
+            all_paths_cost.insert(all_paths_cost.begin() + pref_path, chosen_cost);
+        }
+
+        //Update previous paths and their costs for the next round of replanning
         previous_paths = replanned_paths;
-        if(print_timings)
-            std::cout << "Total replan time: " << (std::chrono::system_clock::now() - start_time).count()/1000000000.0 << "\n";
+        previous_path_costs = all_paths_cost;
+
+        if (print_timings)
+            std::cout << "Total replan time: " << (std::chrono::system_clock::now() - start_time).count() / 1000000000.0 << "\n";
+
         return replanned_paths;
     }
 
@@ -693,78 +755,16 @@ namespace voronoi_path
         return true;
     }
 
-    //https://www.cs.huji.ac.il/~jeff/aaai10/02/AAAI10-216.pdf
-    std::complex<double> voronoi_path::calcHomotopyClass(const std::vector<int> &path_)
+    std::vector<GraphNode> voronoi_path::convertToPixelPath(const std::vector<int> &path_)
     {
-        std::vector<std::complex<double>> path;
-        path.reserve(path_.size());
+        std::vector<GraphNode> return_path;
+        for (const auto &node : path_)
+            return_path.emplace_back(node_inf[node].x, node_inf[node].y);
 
-        //Convert path to complex path
-        for (auto node : path_)
-            path.emplace_back(node_inf[node].x, node_inf[node].y);
-
-        //Go through each edge of the path
-        std::complex<double> path_sum(0, 0);
-        int num_threads = std::thread::hardware_concurrency();
-        std::vector<std::future<std::complex<double>>> future_vector;
-        future_vector.reserve(num_threads);
-
-        int poses_per_thread = path.size() / num_threads;
-
-        for (int i = 0; i < num_threads; ++i)
-        {
-            int start_pose = i * poses_per_thread;
-
-            //Last thread takes remaining poses
-            if (i == num_threads - 1)
-                poses_per_thread = path.size() - poses_per_thread * (num_threads - 1);
-
-            future_vector.emplace_back(std::async(
-                std::launch::async,
-                [&, start_pose, poses_per_thread, path](const std::vector<std::complex<double>> &centers) {
-                    std::complex<double> thread_sum(0, 0);
-                    for (int i = start_pose + 1; i < start_pose + poses_per_thread + 1; i++)
-                    {
-                        std::complex<double> edge_sum(0, 0);
-
-                        if (i >= path.size())
-                            continue;
-
-                        //Each edge must iterate through all obstacles
-                        for (int j = 0; j < centers.size(); ++j)
-                        {
-                            double real_part = std::log(std::abs(path[i] - centers[j])) - std::log(std::abs(path[i - 1] - centers[j]));
-                            double im_part = std::arg(path[i] - centers[j]) - std::arg(path[i - 1] - centers[j]);
-
-                            //Get smallest angle
-                            while (im_part > M_PI)
-                                im_part -= 2 * M_PI;
-
-                            while (im_part < -M_PI)
-                                im_part += 2 * M_PI;
-
-                            edge_sum += (std::complex<double>(real_part, im_part) * obs_coeff[j]);
-                        }
-                        //Add this edge's sum to the path sum
-                        thread_sum += edge_sum;
-                    }
-
-                    return thread_sum;
-                },
-                std::ref(centers)));
-        }
-
-        for (int i = 0; i < future_vector.size(); ++i)
-        {
-            future_vector[i].wait();
-            std::complex<double> temp_sum = future_vector[i].get();
-            path_sum += temp_sum;
-        }
-
-        // std::cout << "Homotopy calc returning " << path_sum << "\n";
-        return path_sum;
+        return return_path;
     }
 
+    //https://www.cs.huji.ac.il/~jeff/aaai10/02/AAAI10-216.pdf
     std::complex<double> voronoi_path::calcHomotopyClass(const std::vector<GraphNode> &path_)
     {
         std::vector<std::complex<double>> path;
@@ -874,7 +874,7 @@ namespace voronoi_path
 
             auto calc_homo_start = std::chrono::system_clock::now();
             //Update homotopy classes vector whenever new kth path gets added
-            homotopy_classes.push_back(std::move(calcHomotopyClass(kthPaths.back())));
+            homotopy_classes.push_back(std::move(calcHomotopyClass(convertToPixelPath(kthPaths.back()))));
             calc_homotopy_cum_time += (std::chrono::system_clock::now() - calc_homo_start).count() / 1000000000.0;
 
             //Spur node is ith node, from start to 2nd last node of path, inclusive
@@ -1053,7 +1053,7 @@ namespace voronoi_path
                 calc_homo_start = std::chrono::system_clock::now();
 
                 //Get homotopy class of the path that is currently being considered
-                std::complex<double> curr_h_class = calcHomotopyClass(potentialKth[it->second]);
+                std::complex<double> curr_h_class = calcHomotopyClass(convertToPixelPath(potentialKth[it->second]));
                 calc_homotopy_cum_time += (std::chrono::system_clock::now() - calc_homo_start).count() / 1000000000.0;
 
                 auto check_min_homo_start = std::chrono::system_clock::now();
@@ -1078,9 +1078,7 @@ namespace voronoi_path
             auto copy_kth = std::chrono::system_clock::now();
             if (!cost_index_vec.empty())
             {
-                int copy_index = cost_index_vec[0].second;
-
-                kthPaths.push_back(potentialKth[copy_index]);
+                kthPaths.push_back(potentialKth[cost_index_vec[0].second]);
                 cost_index_vec.erase(cost_index_vec.begin());
             }
 
@@ -1393,15 +1391,15 @@ namespace voronoi_path
             curr_y = (1.0 - curr_step) * start.y + curr_step * end.y;
 
             pixel = int(curr_x) + int(curr_y) * map_ptr->width;
-            if(pixel < map_ptr->data.size())
+            if (pixel < map_ptr->data.size())
             {
-                if(map_ptr->data.at(pixel) > threshold)
+                if (map_ptr->data.at(pixel) > threshold)
                     return true;
             }
 
             else
                 break;
-            
+
             curr_step += increment;
         }
         return false;
@@ -1582,7 +1580,7 @@ namespace voronoi_path
             }
 
             //Return original path if there was interpolation failure
-            if(!had_failure)
+            if (!had_failure)
                 paths[j] = std::move(bezier_path);
         }
 
@@ -1591,6 +1589,7 @@ namespace voronoi_path
     bool voronoi_path::clearPreviousPaths()
     {
         previous_paths.clear();
+        previous_path_costs.clear();
 
         return true;
     }
