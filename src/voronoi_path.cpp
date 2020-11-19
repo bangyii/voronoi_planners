@@ -379,70 +379,114 @@ namespace voronoi_path
         uint32_t hashed_int = std::hash<uint32_t>{}(static_cast<uint32_t>((static_cast<uint16_t>(x) << 16) ^ static_cast<uint16_t>(y)));
         return hashed_int;
     }
-
+    
+    //Iterative trimming of path
     bool voronoi_path::trimPathBeginning(std::vector<GraphNode> &path)
     {
-        std::vector<GraphNode> path_copy = path;
-        GraphNode connected_point;
-        int i = 1;
+        //Index of node that collides with the anchor node
+        int collision_node = 0;
 
-        //Trim nodes except start and end nodes
-        for (i = 1; i < path.size() - 1; ++i)
+        //Anchor node that is being used to check for collision
+        int anchor_node = 0;
+
+        //Anchor node that should be used for the next iteration
+        int future_anchor_node = 0;
+
+        //While collision node has not reached the last node
+        while(collision_node < path.size() - 1)
         {
-            if (edgeCollides(path[0], path[i + 1], collision_threshold - 10))
-                break;
-        }
-
-        connected_point = path[i];
-
-        //Change paths that should be deleted into orthogonal projection onto the final line instead
-        auto node_to_remove = path.begin() + 1;
-        double gradient, inv_gradient;
-        try
-        {
-            gradient = (path[0].y - connected_point.y) / (path[0].x - connected_point.x);
-            inv_gradient = -1.0 / gradient;
-        }
-        catch (std::exception &e)
-        {
-            std::cout << "Calculate gradient exception: " << e.what() << "\n";
-        }
-
-        while (i > 1)
-        {
-            GraphNode ori_point = *node_to_remove;
-
-            //y = mx + c =====> c = y - mx
-            //(a)x + (1)y = c =====> a = -m
-            double c1 = connected_point.y - gradient * connected_point.x;
-            double c2 = ori_point.y - inv_gradient * ori_point.x;
-            double a1 = -gradient;
-            double a2 = -inv_gradient;
-            double determinant = a1 - a2;
-
-            double x = node_to_remove->x;
-            double y = node_to_remove->y;
-
-            if (determinant != 0)
+            //From anchor_node, traverse path until there is a collision, set that as the collision node
+            //Trim nodes except start and end nodes
+            int connected_node = path.size() - 1;
+            int i;
+            // std::cout << "Anchor node : " << anchor_node << "\n";
+            for (i = anchor_node + 1; i < path.size() - 1; ++i)
             {
-                x = (c1 - c2) / determinant;
-                y = (a1 * c2 - a2 * c1) / determinant;
+                //If collision with node i occurs, then set the connected point as the node before i
+                if (edgeCollides(path[anchor_node], path[i], trimming_collision_threshold))
+                {
+                    // std::cout << "Collision at node: " << i << "\n";
+                    connected_node = i-1;
+                    break;
+                }
+            }
+            collision_node = i;
+            future_anchor_node = collision_node;
+            // std::cout << "Collision node is now: " << collision_node << ", path size is " << path.size() << "\n";
+
+            //Between anchor_node and collision node - 1, project point onto straight line connection anchor node to collision node - 1
+            //Project trimmable poses on the path onto the straight line between anchor_node and connected_point
+            double gradient, inv_gradient;
+            try
+            {
+                gradient = (path[anchor_node].y - path[connected_node].y) / (path[anchor_node].x - path[connected_node].x);
+                inv_gradient = -1.0 / gradient;
+            }
+            catch (std::exception &e)
+            {
+                // std::cout << "Calculate gradient exception: " << e.what() << "\n";
             }
 
-            //If point is not on segment between starting point and connected point, delete the point
-            if ((x - connected_point.x) * (x - path[0].x) >= 0.0)
+            // auto node_to_modify = path.begin() + 1 + anchor_node;
+            // std::cout << "Modification starting from node: " << anchor_node + 1 << "\n";
+            for(int j = anchor_node + 1; j < connected_node; ++j)
+            // while (node_to_modify < path.end() - 1 && i > 1)
             {
-                node_to_remove = path.erase(node_to_remove);
-                --i;
-                continue;
+                if(j >= path.size())
+                    break;
+
+                //Project points onto the straight line
+                //y = mx + c =====> c = y - mx
+                //(a)x + (1)y = c =====> a = -m
+                double c1 = path[connected_node].y - gradient * path[connected_node].x;
+                double c2 = path[j].y - inv_gradient * path[j].x;
+                double a1 = -gradient;
+                double a2 = -inv_gradient;
+                double determinant = a1 - a2;
+
+                double x = path[j].x;
+                double y = path[j].y;
+
+                if (determinant != 0)
+                {
+                    x = (c1 - c2) / determinant;
+                    y = (a1 * c2 - a2 * c1) / determinant;
+                }
+
+                //If point is not on segment between anchor point and connected point, delete the point
+                if ((x - path[connected_node].x) * (x - path[anchor_node].x) >= 0.0)
+                {
+                    // std::cout << "Node " << j << " is not on the segment, deleting\n";
+                    j = std::distance(path.begin(), path.erase(path.begin() + j)) - 1;
+
+                    //Decrement connected_node and collision_node because a node before connected_node has been erased
+                    --connected_node;
+                    --collision_node;
+
+                    // node_to_modify = path.erase(node_to_modify);
+                    // --i;
+                    continue;
+                }
+
+                path[j].x = x;
+                path[j].y = y;
+
+                // Also find the future anchor node, definition of future anchor node is the node that can be connected to collision node, without collision
+                // If currently modified node has no collision with collision node, then it is the future anchor, only set this once
+                if(collision_node != path.size() - 1 && !edgeCollides(path[j], path[collision_node], trimming_collision_threshold))
+                {
+                    // std::cout << "New future anchor node found, breaking projection loop\n";
+                    future_anchor_node = j;
+                    break;
+                }
+
+                // ++node_to_modify;
+                // --i;
             }
 
-            node_to_remove->x = x;
-            node_to_remove->y = y;
-
-            ++node_to_remove;
-            --i;
+            anchor_node = future_anchor_node;
         }
+
 
         return true;
     }
@@ -532,49 +576,6 @@ namespace voronoi_path
         auto start_time = std::chrono::system_clock::now();
         if (previous_paths.empty())
             return previous_paths;
-
-        // std::vector<std::vector<GraphNode>> replanned_paths(previous_paths);
-        // //Check robot's current position to previous paths' first pose causes collision
-        // //Current radius in pixels and angle in radians
-        // double current_radius = 1.0, current_angle = 0;
-        // double max_pix_radius = search_radius / map_ptr->resolution;
-        // if(edgeCollides(previous_paths[0][0], start, trimming_collision_threshold))
-        // {
-        //     //Collision occurs, search area around robot to find empty cell to replace as start pose
-        //     while (current_radius < max_pix_radius)
-        //     {
-        //         current_angle = 0;
-        //         while (current_angle <= 2 * M_PI)
-        //         {
-        //             double x = start.x + cos(current_angle) * current_radius;
-        //             double y = start.y + sin(current_angle) * current_radius;
-
-        //             GraphNode candidate_start(x, y);
-        //             if (!edgeCollides(candidate_start, previous_paths[0][0], trimming_collision_threshold))
-        //             {
-        //                 //TODO: Add tunable buffer to reduce chances of path getting stuck
-        //                 start = candidate_start + GraphNode(cos(current_angle) * 3, sin(current_angle) * 3);
-        //                 current_radius = max_pix_radius;
-        //                 break;
-        //             }
-
-        //             //TODO:: Angle increment should be dependant on current radius
-        //             current_angle += 0.1;
-        //         }
-
-        //         current_radius += 1.0;
-        //     }
-        // }
-
-        // //Nearby empty cell not found, since angle limits have been reached yet
-        // if (current_angle > 2 * M_PI)
-        //     std::cout << "WARN: No empty cell within search radius: " << search_radius << "m\n";
-
-        // for (int i = 0; i < previous_paths.size(); ++i)
-        // {
-        //     trimPathBeginning(replanned_paths[i]);
-        //     replanned_paths[i].insert(replanned_paths[i].begin(), start);
-        // }
 
         // Replan, from current position to the first position of previous path
         std::vector<std::vector<GraphNode>> replanned_paths(previous_paths);
@@ -1533,7 +1534,7 @@ namespace voronoi_path
                 {
                     sub_nodes.push_back(paths[j][i - 1]);
 
-                    //Calculate extra node based on previous subsection's gradient
+                    //Calculate extra node based on previous subsection's gradient, provided there are 2 previous nodes to compute the extra nodes
                     if (i > 1 && prev_2_nodes.size() == 2)
                     {
                         GraphNode dir(prev_2_nodes[1] - prev_2_nodes[0]);
@@ -1578,10 +1579,6 @@ namespace voronoi_path
                 bezier_path.insert(bezier_path.end(), temp_bezier.begin(), temp_bezier.end());
                 sub_nodes.clear();
             }
-
-            //Return original path if there was interpolation failure
-            if (!had_failure)
-                paths[j] = std::move(bezier_path);
         }
 
         return !had_failure;

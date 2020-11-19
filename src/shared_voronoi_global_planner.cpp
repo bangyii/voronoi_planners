@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <limits>
 #include <geometry_msgs/Point.h>
+#include <tf2_ros/transform_listener.h>
 
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -25,17 +26,17 @@ namespace shared_voronoi_global_planner
 
     void SharedVoronoiGlobalPlanner::updateVoronoiCB(const ros::WallTimerEvent &e)
     {
-        if(update_voronoi_rate == 0)
+        if (update_voronoi_rate == 0)
         {
             ros::Rate r(1);
-            while(map.data.empty())
+            while (map.data.empty())
             {
                 ROS_WARN("Map is still empty, unable to update/initialize, waiting until map is not empty");
                 r.sleep();
                 ros::spinOnce();
             }
         }
-        
+
         else
         {
             if (map.data.empty())
@@ -200,7 +201,7 @@ namespace shared_voronoi_global_planner
             edges_viz_pub = nh.advertise<visualization_msgs::MarkerArray>("voronoi_edges", 1);
 
             //Create timer to update Voronoi diagram, use one shot timer if update rate is 0
-            if(update_voronoi_rate != 0)
+            if (update_voronoi_rate != 0)
                 voronoi_update_timer = nh.createWallTimer(ros::WallDuration(1.0 / update_voronoi_rate), &SharedVoronoiGlobalPlanner::updateVoronoiCB, this);
             else
                 voronoi_update_timer = nh.createWallTimer(ros::WallDuration(1), &SharedVoronoiGlobalPlanner::updateVoronoiCB, this, true);
@@ -214,23 +215,46 @@ namespace shared_voronoi_global_planner
 
     bool SharedVoronoiGlobalPlanner::makePlan(const geometry_msgs::PoseStamped &start, const geometry_msgs::PoseStamped &goal, std::vector<geometry_msgs::PoseStamped> &plan)
     {
+        //Transform goal and start to map frame if they are not already in map frame
+        geometry_msgs::PoseStamped start_ = start;
+        geometry_msgs::PoseStamped goal_ = goal;
+
+        if (goal_.header.frame_id != map.frame_id)
+        {
+            tf2_ros::Buffer tf_buffer;
+            tf2_ros::TransformListener tf_listener(tf_buffer);
+            ROS_WARN("Goal position is not in map frame, transforming goal to map frame before continuing");
+            geometry_msgs::TransformStamped goal2MapTF;
+
+            try
+            {
+                goal2MapTF = tf_buffer.lookupTransform(map.frame_id, goal.header.frame_id, ros::Time(0), ros::Duration(1.0));
+            }
+            catch (tf2::TransformException &Exception)
+            {
+                ROS_ERROR_STREAM(Exception.what());
+            }
+
+            geometry_msgs::Pose temp_goal;
+            temp_goal = goal_.pose;
+            tf2::doTransform<geometry_msgs::Pose>(temp_goal, temp_goal, goal2MapTF);
+            goal_.pose = temp_goal;
+        }
+
         std::vector<std::vector<voronoi_path::GraphNode>> all_paths;
 
         //Get start and end points in terms of global costmap pixels
-        voronoi_path::GraphNode end_point((goal.pose.position.x - map.origin.position.x) / map.resolution,
-                                          (goal.pose.position.y - map.origin.position.y) / map.resolution);
-        voronoi_path::GraphNode start_point((start.pose.position.x - map.origin.position.x) / map.resolution,
-                                            (start.pose.position.y - map.origin.position.y) / map.resolution);
+        voronoi_path::GraphNode end_point((goal_.pose.position.x - map.origin.position.x) / map.resolution,
+                                          (goal_.pose.position.y - map.origin.position.y) / map.resolution);
+        voronoi_path::GraphNode start_point((start_.pose.position.x - map.origin.position.x) / map.resolution,
+                                            (start_.pose.position.y - map.origin.position.y) / map.resolution);
 
         //move_base had a goal previously set, so paths should be trimmed based on previous one instead of replanning entirely
         if (voronoi_path.hasPreviousPaths() && prev_goal == end_point)
         {
             all_paths = voronoi_path.replan(start_point, end_point, num_paths, preferred_path);
             if (!voronoi_path.bezierInterp(all_paths))
-            {                    
                 ROS_DEBUG("Bezier interpolation failed, original path already collides with obstacle");
-                // return true;
-            }
         }
 
         //move_base was not running, there are no previous paths. So planning should be done from scratch
@@ -244,14 +268,11 @@ namespace shared_voronoi_global_planner
             //TODO: What is the purpose of this?
             //Smooth the path received from voronoi planner, return true when fail so the global planner can try replanning/update position
             if (!voronoi_path.bezierInterp(all_paths))
-            {                    
                 ROS_DEBUG("Bezier interpolation failed, original path already collides with obstacle");
-                // return true;
-            }
-            
-            if (all_paths.size() < num_paths)
-                ROS_WARN("Could not find all requested paths. Requested: %d, found: %ld", num_paths, all_paths.size());
         }
+
+        if (all_paths.size() < num_paths)
+            ROS_WARN("Could not find all requested paths. Requested: %d, found: %ld", num_paths, all_paths.size());
 
         //If paths are found
         if (!all_paths.empty())
@@ -274,14 +295,16 @@ namespace shared_voronoi_global_planner
                     marker.id = i;
                     marker.type = 4;
                     marker.action = 0;
+                    // marker.scale.x = 0.05 + (0.2 * i / all_paths.size());
                     marker.scale.x = 0.05;
                     marker.color.r = (255 / all_paths.size() * i) / 255.0;
-                    marker.color.g = (255 / all_paths.size() * i) / 255.0;
-                    marker.color.b = (255 / all_paths.size() * i) / 255.0;
+                    // marker.color.g = (255 / all_paths.size() * i) / 255.0;
+                    marker.color.g = 0;
+                    marker.color.b = (255 / all_paths.size() * (all_paths.size() - i)) / 255.0;
                     marker.color.a = 1.0;
                     marker.pose.orientation.w = 1.0;
-                    marker.lifetime = ros::Duration(1.0);                   
-                    
+                    marker.lifetime = ros::Duration(1.0);
+
                     points.header = header;
                     points.ns = std::string("Path points ") + std::to_string(i);
                     points.id = i + all_paths.size();
@@ -317,16 +340,16 @@ namespace shared_voronoi_global_planner
                 }
 
                 if (publish_all_path_markers)
-                {                        
+                {
                     marker_array.markers.push_back(marker);
-                    marker_array.markers.push_back(points);
+                    // marker_array.markers.push_back(points);
                 }
 
                 //Adjust orientation of start and end positions
                 if (!all_paths_meters[i].empty())
                 {
-                    all_paths_meters[i][0].pose.orientation = start.pose.orientation;
-                    all_paths_meters[i].back().pose.orientation = goal.pose.orientation;
+                    all_paths_meters[i][0].pose.orientation = start_.pose.orientation;
+                    all_paths_meters[i].back().pose.orientation = goal_.pose.orientation;
                 }
             }
 
@@ -335,9 +358,10 @@ namespace shared_voronoi_global_planner
                 all_paths_pub.publish(marker_array);
 
             //Select the path most similar to user commanded velocity path
-            double dist = pow(start.pose.position.x - goal.pose.position.x, 2) + pow(start.pose.position.y - goal.pose.position.y, 2);
-            if ((cmd_vel.linear.x != 0.0 || cmd_vel.angular.z != 0.0) && dist > pow(near_goal_threshold, 2))
-                preferred_path = getMatchedPath(start, all_paths_meters);
+            double dist = pow(start_.pose.position.x - goal_.pose.position.x, 2) + pow(start_.pose.position.y - goal_.pose.position.y, 2);
+            // if ((cmd_vel.linear.x != 0.0 || cmd_vel.angular.z != 0.0) && dist > pow(near_goal_threshold, 2))
+            if (sqrt(pow(cmd_vel.linear.x, 2) + pow(cmd_vel.angular.z, 2)) > 0.8 * joy_max_lin && dist > pow(near_goal_threshold, 2))
+                preferred_path = getMatchedPath(start_, all_paths_meters);
 
             //Set selected plan
             if (all_paths_meters.size() > preferred_path)
@@ -456,9 +480,9 @@ namespace shared_voronoi_global_planner
         //If the angular difference of a path is greater than selection_threshold%, change cost to infinity
         std::vector<double> total_costs = voronoi_path.getAllPathCosts();
         double min_val = *std::min_element(ang_diff_sq.begin(), ang_diff_sq.end());
-        for(int i = 0; i < ang_diff_sq.size(); ++i)
+        for (int i = 0; i < ang_diff_sq.size(); ++i)
         {
-            if(ang_diff_sq[i] / min_val >= selection_threshold)
+            if (ang_diff_sq[i] / min_val >= selection_threshold)
                 total_costs[i] = std::numeric_limits<double>::infinity();
         }
 
