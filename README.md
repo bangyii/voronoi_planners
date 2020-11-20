@@ -27,14 +27,14 @@ A* path finding algorithm with Euclidean distance heuristics is used to find the
 
 `~/voronoi_edges [visualization_msgs::MarkerArray]:` Visualization markers for voronoi edges and singly connected nodes (red points on the map).
 
-## Params
+## Parameters
 `occupancy_threshold:` Integer threshold of costmap pixels before it is considered an occupied cell, which will then be used to generate the voronoi diagram.
 
 `collision_threshold:` Integer threshold of costmap pixels before it is considered a collision. This threshold is used during the pruning of generated voronoi edges, as well as during path smoothing.
 
-`update_voronoi_rate:` Rate at which to update the voronoi diagram, Hz.
+`trimming_collision_threshold:` Integer threshold of costmap pixels before it is considered an occupied cell during the trimming/contraction of generated paths. Prevents the paths from contracting too near to an obstalce.
 
-`update_costmap_rate:` Rate at which to update the internal costmap, which affects the voronoi diagram generated, Hz.
+`update_voronoi_rate:` Rate at which to update the voronoi diagram, Hz.
 
 `print_timings:` Set true to print all timing related information into the console. Mainly for debugging/optimization purposes.
 
@@ -70,4 +70,14 @@ A* path finding algorithm with Euclidean distance heuristics is used to find the
 
 `joy_max_ang:` Maximum joystick angular velocity, same usage as joy_max_lin.
 
-`trim_path_beginning:` Boolean indicating whether or not the trim the beginning of paths to reduce redundant turns
+`search_radius:` The radius in meters in which to search the robot's current position to find an empty cell, if the robot is inside the inflation zone of an obstacle during the replanning of paths.
+
+`subscribe_local_costmap:` Whether or not to subscribe to local costmap, this should work in tandem with cases when *update_voronoi_rate* is not set to 0
+
+`static_global_map:` Whether the global map is static, ie not running mapping. If this is set to false, then *update_voronoi_rate* needs to be set to greater than 0
+
+`selection_threshold:` Percentage threshold in float (1.2 = 120%) in which paths with matching scores within this threshold (compared to the closest matching path) will be added to the list of paths that could be selected. For example, given that there are 4 paths, and the user indicates a specific direction. After calculation how close each path's first segment matches the user's direction, a score array of [1, 1.1, 4, 3.3] is found. In this case, if this parameter is set to 1.2, paths 1 and 2 (scores 1 and 1.1) will be added to list of paths to be considered. 
+
+Scaled score of path 1 is 1, because it has the minimum score. Whereas scaled score of path 2 is 1.1/1 (this path's match score / shortest path's match score).
+
+Among the list of paths to be considered, the path that is physically shorter will be selected. This parameter aims to solve the issue where if there were several paths with identical starting segments, it's more likely the user would select the path that is shorter in that direction, instead of the longer one.

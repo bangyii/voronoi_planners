@@ -140,24 +140,78 @@ namespace shared_voronoi_global_planner
         double joy_max_ang = 1.0;
 
         /**
-         * Whether or not to trim beggining of paths generated
+         * Time to forward simulate user's joystick input to select path
          **/
-        bool trim_path_beginning = true;
-
         double forward_sim_time = 1.0;       //s
+
+        /**
+         * Resolution in which to forward simulate the user's chosen direction
+         **/ 
         double forward_sim_resolution = 0.1; //m
+
+        /**
+         * If the user is within this threshold (meters) from the goal, the user can no longer select a different path
+         **/
         double near_goal_threshold = 1.0;
+
+        /**
+         * If there are multiple paths that are less than this threshold (%) greater than the best matching path, then those
+         * paths will also be considered during path selection. ie, if there are 4 paths, and user selects a direction, if the 
+         * match cost of those 4 paths to the user's direction are [1, 1.1, 1.5, 2.3], then path 1 and 2 will be considered.
+         * Within all the paths that are <1.2*minCost, the physically shortest path will be chose
+         **/
         double selection_threshold = 1.2;
+
+        /**
+         * Choice to add the 4 corners of the local costmap as virtual obstacles, to enable generation of a voronoi diagram 
+         * in an empty space
+         **/
         bool add_local_costmap_corners = false;
+
+        /**
+         * Parameter to indicate wheteher to publish markers for all generated paths
+         **/
         bool publish_all_path_markers = false;
+
+        /**
+         * Joystick topic to subscribe to for user's indicated direction
+         **/
         std::string joystick_topic = "/joy_vel";
+
+        /**
+         * Whether to publish markers to visualize the voronoi diagram's edges, lonely nodes in the voronoi diagram (singly connected),
+         * and centroids of obstacles
+         **/
         bool visualize_edges = false;
+
+        /**
+         * Parameter to set whether or not to subscribe to local costmap
+         **/
         bool subscribe_local_costmap = true;
+
+        /**
+         * Parameter to set whether global map is static (no mapping is being run)
+         **/
+        bool static_global_map = true;
+
+        /**
+         * Interval variable to store the preffered path from previous time step. Defaults to 0 which is the shortest path
+         **/
         int preferred_path = 0;
+
+        /**
+         * Internal variable to store previous goal. This will help determine if the goal has changed and a full planning needs to be 
+         * done, instead of replanning from previous time step
+         **/
         voronoi_path::GraphNode prev_goal;
         
+        /**
+         * Internal store of pixels that were modified during the last local costmap callback, used to restore the pixels in the following 
+         * time step when a new callback is called
+         **/
         std::vector<std::pair<int, int>> map_pixels_backup;
 
+        //ROS variables
         ros::NodeHandle nh;
         ros::Subscriber local_costmap_sub;
         ros::Subscriber global_costmap_sub;
@@ -170,16 +224,39 @@ namespace shared_voronoi_global_planner
         ros::Publisher user_direction_pub;
         ros::Publisher edges_viz_pub;
 
+        /**
+         * Timer for updating the voronoi diagram, if specified in rosparams
+         **/
         ros::WallTimer voronoi_update_timer;
-        ros::WallTimer map_update_timer;
+
+        /**
+         * To store user's indicated direction
+         **/
         geometry_msgs::Twist cmd_vel;
 
-        ros::Publisher centroid_pub;
-
+        /**
+         * Callback for local costmap, if subscribed
+         **/
         void localCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg);
+
+        /**
+         * Callback for status of move_base
+         **/
         void moveBaseStatusCB(const actionlib_msgs::GoalStatusArray::ConstPtr &msg);
+
+        /**
+         * Callback for global costmap
+         **/
         void globalCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg);
+
+        /**
+         * Callback for global costmap updates, required if the global costmap is not static and is being updated
+         **/
         void globalCostmapUpdateCB(const map_msgs::OccupancyGridUpdate::ConstPtr &msg);
+
+        /**
+         * Callback for Twist from joystick which indicates user direction
+         **/
         void cmdVelCB(const geometry_msgs::Twist::ConstPtr &msg);
 
         /**

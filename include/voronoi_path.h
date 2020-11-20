@@ -186,7 +186,6 @@ namespace voronoi_path
          * @param map_ map to use for generation of voronoi graph
          * @return boolean indicating success
          **/
-        // bool mapToGraph(const Map &map_);
         bool mapToGraph(Map* map_ptr_);
 
         /**
@@ -251,7 +250,7 @@ namespace voronoi_path
         bool print_timings = false;
 
         /**
-         * Threhsold before a pixel is considered occupied. If pixel value is < occupancy_threshold, it is considered free
+         * Threshold before a pixel is considered occupied. If pixel value is < occupancy_threshold, it is considered free
          **/
         int occupancy_threshold = 100;
 
@@ -304,11 +303,6 @@ namespace voronoi_path
          * If there is a node within this threshold away from a node that only has 1 connection, they will both be connected
          **/
         int node_connection_threshold_pix = 1;
-
-        /**
-         * Whether or not to trim beggining of paths generated
-         **/
-        bool trim_path_beginning = true;
 
     private:
         /**
@@ -532,7 +526,7 @@ namespace voronoi_path
          * @param path path to trim
          * @return bool indicating success
          **/
-        bool trimPathBeginning(std::vector<GraphNode> &path);
+        bool contractPath(std::vector<GraphNode> &path);
     };
 
 } // namespace voronoi_path

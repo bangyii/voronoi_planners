@@ -46,6 +46,7 @@ namespace shared_voronoi_global_planner
             }
         }
 
+        //Call voronoi object to update its internal voronoi diagram
         voronoi_path.mapToGraph(&map);
 
         //Get obstacle centroids from map
@@ -158,6 +159,7 @@ namespace shared_voronoi_global_planner
             nh.getParam("extra_point_distance", extra_point_distance);
             nh.getParam("add_local_costmap_corners", add_local_costmap_corners);
             nh.getParam("forward_sim_time", forward_sim_time);
+            nh.getParam("forward_sim_resolution", forward_sim_resolution);
             nh.getParam("num_paths", num_paths);
             nh.getParam("publish_all_path_markers", publish_all_path_markers);
             nh.getParam("joystick_topic", joystick_topic);
@@ -166,11 +168,11 @@ namespace shared_voronoi_global_planner
             nh.getParam("collision_threshold", collision_threshold);
             nh.getParam("joy_max_lin", joy_max_lin);
             nh.getParam("joy_max_ang", joy_max_ang);
-            nh.getParam("trim_path_beginning", trim_path_beginning);
             nh.getParam("subscribe_local_costmap", subscribe_local_costmap);
             nh.getParam("trimming_collision_threshold", trimming_collision_threshold);
             nh.getParam("search_radius", search_radius);
             nh.getParam("selection_threshold", selection_threshold);
+            nh.getParam("static_global_map", static_global_map);
 
             //Set parameters for voronoi path object
             voronoi_path.h_class_threshold = h_class_threshold;
@@ -178,18 +180,20 @@ namespace shared_voronoi_global_planner
             voronoi_path.node_connection_threshold_pix = node_connection_threshold_pix;
             voronoi_path.extra_point_distance = extra_point_distance;
             voronoi_path.min_node_sep_sq = min_node_sep_sq;
-            voronoi_path.trim_path_beginning = trim_path_beginning;
             voronoi_path.trimming_collision_threshold = trimming_collision_threshold;
             voronoi_path.search_radius = search_radius;
 
             //Subscribe and advertise related topics
             global_costmap_sub = nh.subscribe("/move_base/global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);
 
-            global_update_sub = nh.subscribe("/move_base/global_costmap/costmap_updates", 1, &SharedVoronoiGlobalPlanner::globalCostmapUpdateCB, this);
-            move_base_stat_sub = nh.subscribe("/move_base/status", 1, &SharedVoronoiGlobalPlanner::moveBaseStatusCB, this);
+            if (!static_global_map)
+                global_update_sub = nh.subscribe("/move_base/global_costmap/costmap_updates", 1, &SharedVoronoiGlobalPlanner::globalCostmapUpdateCB, this);
 
             if (subscribe_local_costmap)
                 local_costmap_sub = nh.subscribe("/move_base/local_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::localCostmapCB, this);
+                
+            //Subscribe to move_base status to know when to clear previous paths
+            move_base_stat_sub = nh.subscribe("/move_base/status", 1, &SharedVoronoiGlobalPlanner::moveBaseStatusCB, this);
 
             //Subscribe to joystick output to get direction selected by user
             user_vel_sub = nh.subscribe(joystick_topic, 1, &SharedVoronoiGlobalPlanner::cmdVelCB, this);
@@ -295,7 +299,6 @@ namespace shared_voronoi_global_planner
                     marker.id = i;
                     marker.type = 4;
                     marker.action = 0;
-                    // marker.scale.x = 0.05 + (0.2 * i / all_paths.size());
                     marker.scale.x = 0.05;
                     marker.color.r = (255 / all_paths.size() * i) / 255.0;
                     // marker.color.g = (255 / all_paths.size() * i) / 255.0;

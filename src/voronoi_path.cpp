@@ -381,7 +381,7 @@ namespace voronoi_path
     }
     
     //Iterative trimming of path
-    bool voronoi_path::trimPathBeginning(std::vector<GraphNode> &path)
+    bool voronoi_path::contractPath(std::vector<GraphNode> &path)
     {
         //Index of node that collides with the anchor node
         int collision_node = 0;
@@ -399,7 +399,6 @@ namespace voronoi_path
             //Trim nodes except start and end nodes
             int connected_node = path.size() - 1;
             int i;
-            // std::cout << "Anchor node : " << anchor_node << "\n";
             for (i = anchor_node + 1; i < path.size() - 1; ++i)
             {
                 //If collision with node i occurs, then set the connected point as the node before i
@@ -412,7 +411,6 @@ namespace voronoi_path
             }
             collision_node = i;
             future_anchor_node = collision_node;
-            // std::cout << "Collision node is now: " << collision_node << ", path size is " << path.size() << "\n";
 
             //Between anchor_node and collision node - 1, project point onto straight line connection anchor node to collision node - 1
             //Project trimmable poses on the path onto the straight line between anchor_node and connected_point
@@ -424,11 +422,9 @@ namespace voronoi_path
             }
             catch (std::exception &e)
             {
-                // std::cout << "Calculate gradient exception: " << e.what() << "\n";
+                std::cout << "Calculate gradient exception: " << e.what() << "\n";
             }
 
-            // auto node_to_modify = path.begin() + 1 + anchor_node;
-            // std::cout << "Modification starting from node: " << anchor_node + 1 << "\n";
             for(int j = anchor_node + 1; j < connected_node; ++j)
             // while (node_to_modify < path.end() - 1 && i > 1)
             {
@@ -456,15 +452,12 @@ namespace voronoi_path
                 //If point is not on segment between anchor point and connected point, delete the point
                 if ((x - path[connected_node].x) * (x - path[anchor_node].x) >= 0.0)
                 {
-                    // std::cout << "Node " << j << " is not on the segment, deleting\n";
                     j = std::distance(path.begin(), path.erase(path.begin() + j)) - 1;
 
                     //Decrement connected_node and collision_node because a node before connected_node has been erased
                     --connected_node;
                     --collision_node;
 
-                    // node_to_modify = path.erase(node_to_modify);
-                    // --i;
                     continue;
                 }
 
@@ -475,13 +468,9 @@ namespace voronoi_path
                 // If currently modified node has no collision with collision node, then it is the future anchor, only set this once
                 if(collision_node != path.size() - 1 && !edgeCollides(path[j], path[collision_node], trimming_collision_threshold))
                 {
-                    // std::cout << "New future anchor node found, breaking projection loop\n";
                     future_anchor_node = j;
                     break;
                 }
-
-                // ++node_to_modify;
-                // --i;
             }
 
             anchor_node = future_anchor_node;
@@ -539,8 +528,7 @@ namespace voronoi_path
                 all_path_nodes[i].push_back(end);
 
                 //Trim beginning of path to remove unnecessary u-turns in path
-                if (trim_path_beginning)
-                    trimPathBeginning(all_path_nodes[i]);
+                contractPath(all_path_nodes[i]);
             }
 
             //Only set previous paths and their costs if this was the first call
@@ -625,7 +613,7 @@ namespace voronoi_path
 
             //No insert and trim if a nearby empty cell is not found
             replanned_paths[i].insert(replanned_paths[i].begin(), start);
-            trimPathBeginning(replanned_paths[i]);
+            contractPath(replanned_paths[i]);
         }
 
         //Explore for potential paths in new homotopy classes
