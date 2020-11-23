@@ -31,10 +31,12 @@ namespace shared_voronoi_global_planner
             ros::Rate r(1);
             while (map.data.empty())
             {
-                ROS_WARN("Map is still empty, unable to update/initialize, waiting until map is not empty");
+                ROS_WARN("Map is still empty, unable to initialize, waiting until map is not empty");
                 r.sleep();
                 ros::spinOnce();
             }
+
+            ROS_WARN("Map is not empty anymore, initializing voronoi diagram");
         }
 
         else
