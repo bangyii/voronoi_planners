@@ -527,6 +527,14 @@ namespace voronoi_path
          * @return bool indicating success
          **/
         bool contractPath(std::vector<GraphNode> &path);
+
+        /**
+         * Checks if the two complex homotopy classes are outside the threshold, ie unique/different
+         * @param complex_1 class 1 to check
+         * @param complex_2 class 2 to check
+         * @return bool indicating true if the 2 classes are unique
+         **/
+        bool isClassDifferent(const std::complex<double> &complex_1, const std::complex<double> &complex_2);
     };
 
 } // namespace voronoi_path

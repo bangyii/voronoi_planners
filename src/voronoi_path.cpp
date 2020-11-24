@@ -40,28 +40,24 @@ namespace voronoi_path
             std::vector<std::vector<cv::Point>> contours;
             std::vector<cv::Vec4i> hierarchy;
             cv::Canny(cv_map, cv_map, 50, 150, 3);
-            cv::findContours(cv_map, contours, hierarchy, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
-
-            //Get center of centroids
-            std::vector<cv::Moments> mu(contours.size());
+            cv::findContours(cv_map, contours, hierarchy, cv::RETR_LIST, cv::CHAIN_APPROX_NONE, cv::Point(0, 0));
             centers = std::vector<std::complex<double>>(contours.size());
+
             for (int i = 0; i < contours.size(); ++i)
             {
-                mu[i] = moments(contours[i], false);
-                centers[i] = std::complex<double>(map_ptr->width - mu[i].m01 / mu[i].m00 / open_cv_scale, map_ptr->height - mu[i].m10 / mu[i].m00 / open_cv_scale);
-            }
-
-            //Delete NaN centroids
-            auto it = centers.begin();
-            while (it != centers.end())
-            {
-                if (std::isnan(it->real()) || std::isnan(it->imag()))
+                //Find part of contour that lies on the inflation zone
+                for (int j = 0; j < contours[i].size(); ++j)
                 {
-                    it = centers.erase(it);
-                    continue;
-                }
+                    centers[i] = std::complex<double>(map_ptr->width - contours[i][j].y / open_cv_scale, map_ptr->height - contours[i][j].x / open_cv_scale);
+                    if (map_ptr->data[floor(centers[i].real()) + floor(centers[i].imag()) * map_ptr->width] > collision_threshold)
+                        break;
 
-                ++it;
+                    if (j == contours[i].size() - 1)
+                    {
+                        std::cout << "WARN: Could not find point on contour " << j << " which lies on the obstacle's inflation zone, path finding may not produce"; 
+                        std::cout << " paths that are strictly in different homotopy classes\n ";
+                    }
+                }
             }
 
             double a = (centers.size() - 1) / 2.0;
@@ -379,7 +375,7 @@ namespace voronoi_path
         uint32_t hashed_int = std::hash<uint32_t>{}(static_cast<uint32_t>((static_cast<uint16_t>(x) << 16) ^ static_cast<uint16_t>(y)));
         return hashed_int;
     }
-    
+
     //Iterative trimming of path
     bool voronoi_path::contractPath(std::vector<GraphNode> &path)
     {
@@ -393,7 +389,7 @@ namespace voronoi_path
         int future_anchor_node = 0;
 
         //While collision node has not reached the last node
-        while(collision_node < path.size() - 1)
+        while (collision_node < path.size() - 1)
         {
             //From anchor_node, traverse path until there is a collision, set that as the collision node
             //Trim nodes except start and end nodes
@@ -405,7 +401,7 @@ namespace voronoi_path
                 if (edgeCollides(path[anchor_node], path[i], trimming_collision_threshold))
                 {
                     // std::cout << "Collision at node: " << i << "\n";
-                    connected_node = i-1;
+                    connected_node = i - 1;
                     break;
                 }
             }
@@ -425,10 +421,10 @@ namespace voronoi_path
                 std::cout << "Calculate gradient exception: " << e.what() << "\n";
             }
 
-            for(int j = anchor_node + 1; j < connected_node; ++j)
+            for (int j = anchor_node + 1; j < connected_node; ++j)
             // while (node_to_modify < path.end() - 1 && i > 1)
             {
-                if(j >= path.size())
+                if (j >= path.size())
                     break;
 
                 //Project points onto the straight line
@@ -466,7 +462,7 @@ namespace voronoi_path
 
                 // Also find the future anchor node, definition of future anchor node is the node that can be connected to collision node, without collision
                 // If currently modified node has no collision with collision node, then it is the future anchor, only set this once
-                if(collision_node != path.size() - 1 && !edgeCollides(path[j], path[collision_node], trimming_collision_threshold))
+                if (collision_node != path.size() - 1 && !edgeCollides(path[j], path[collision_node], trimming_collision_threshold))
                 {
                     future_anchor_node = j;
                     break;
@@ -475,7 +471,6 @@ namespace voronoi_path
 
             anchor_node = future_anchor_node;
         }
-
 
         return true;
     }
@@ -570,10 +565,10 @@ namespace voronoi_path
         for (int i = 0; i < replanned_paths.size(); ++i)
         {
             //Search nearby area around robot to find an empty cell to connect to the previous path
-            //FIXME: For some reason, if collision is found and a new start point is found, some 
+            //FIXME: For some reason, if collision is found and a new start point is found, some
             //paths still have collision with the new start point, even tho theoretically all first poses
             //in previous paths should be identical
-            if (edgeCollides(previous_paths[i][0], start, trimming_collision_threshold))
+            if (edgeCollides(replanned_paths[i][0], start, trimming_collision_threshold))
             {
                 //Current radius in pixels and angle in rads
                 double current_radius = 1.0, current_angle = 0;
@@ -582,7 +577,7 @@ namespace voronoi_path
                 while (current_radius <= max_pix_radius && !found_new_start)
                 {
                     current_angle = 0;
-                    // s = r(theta), solve theta such that s == 1, 1 pixel 
+                    // s = r(theta), solve theta such that s == 1, 1 pixel
                     double increment = 1.0 / current_radius;
                     while (current_angle < 2 * M_PI && !found_new_start)
                     {
@@ -590,7 +585,7 @@ namespace voronoi_path
                         double y = start.y + sin(current_angle) * current_radius;
 
                         GraphNode candidate_start(x, y);
-                        if (!edgeCollides(candidate_start, previous_paths[i][0], trimming_collision_threshold))
+                        if (!edgeCollides(candidate_start, replanned_paths[i][0], trimming_collision_threshold))
                         {
                             //TODO: Add buffer to reduce chances of path getting stuck
                             start = candidate_start + GraphNode(cos(current_angle) * 3, sin(current_angle) * 3);
@@ -605,10 +600,7 @@ namespace voronoi_path
 
                 //No nearby empty cell found
                 if (!found_new_start)
-                {
                     std::cout << "WARN: No empty cell within search radius: " << search_radius << "m\n";
-                    // continue;
-                }
             }
 
             //No insert and trim if a nearby empty cell is not found
@@ -618,12 +610,33 @@ namespace voronoi_path
 
         //Explore for potential paths in new homotopy classes
         std::vector<std::vector<GraphNode>> potential_paths = getPath(start, end, num_paths / 2);
-
-        //FIXME: This may take a lot of computation
-        //Calculate homotopy class of paths and compare it with the previous set of paths
+            
+        //Calculate homotopy class of paths and compare it with the previous set of paths, remove any duplicates
         std::vector<std::complex<double>> previous_classes;
-        for (const auto &path : replanned_paths)
-            previous_classes.push_back(calcHomotopyClass(path));
+
+        auto path_it = replanned_paths.begin();
+        while(path_it < replanned_paths.end())
+        {
+            bool erased = false;
+            previous_classes.push_back(calcHomotopyClass(*path_it));
+
+            //Check all previous classes upto before the most recently added one
+            for(int i = 0; i < previous_classes.size() - 1; ++i)
+            {                    
+                //If the most recent class is not unique and has been added before
+                if(!isClassDifferent(previous_classes.back(), previous_classes[i]))
+                {
+                    //Erase non-unique path and pop back most recently added class
+                    path_it = replanned_paths.erase(path_it);
+                    previous_classes.pop_back();
+                    erased = true;
+                    break;
+                }
+            }
+
+            if(!erased)
+                ++path_it;
+        }
 
         //Paths within potential paths are guaranteed to be unique compared to each other
         for (const auto &path : potential_paths)
@@ -632,7 +645,7 @@ namespace voronoi_path
             for (int k = 0; k < previous_classes.size(); ++k)
             {
                 //Path is not unique
-                if (std::abs(temp_class - previous_classes[k]) / std::abs(temp_class) <= h_class_threshold)
+                if(!isClassDifferent(temp_class, previous_classes[k]))
                     break;
 
                 //Path is unique since all paths have been checked
@@ -641,7 +654,7 @@ namespace voronoi_path
             }
         }
 
-        //If number of paths greater than num_paths, delete longest paths until equal
+        //Get cost of all the paths
         std::vector<double> all_paths_cost(replanned_paths.size());
         for (int j = 0; j < replanned_paths.size(); ++j)
         {
@@ -652,6 +665,7 @@ namespace voronoi_path
             all_paths_cost[j] = total_cost;
         }
 
+        //If number of paths greater than num_paths, delete longest paths until equal
         std::vector<GraphNode> chosen_path;
         double chosen_cost;
         while (replanned_paths.size() > num_paths)
@@ -1050,7 +1064,7 @@ namespace voronoi_path
                 for (h = 0; h < homotopy_classes.size(); ++h)
                 {
                     //Path is not unique
-                    if (std::abs(curr_h_class - homotopy_classes[h]) / std::abs(curr_h_class) <= h_class_threshold)
+                    if(!isClassDifferent(curr_h_class, homotopy_classes[h]))
                     {
                         //Erase and then break if not unique
                         it = cost_index_vec.erase(it);
@@ -1582,5 +1596,10 @@ namespace voronoi_path
     bool voronoi_path::hasPreviousPaths()
     {
         return !previous_paths.empty();
+    }
+
+    bool voronoi_path::isClassDifferent(const std::complex<double> &complex_1, const std::complex<double> &complex_2)
+    {
+        return std::abs(complex_1 - complex_2) / std::abs(complex_1) > h_class_threshold;
     }
 } // namespace voronoi_path

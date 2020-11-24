@@ -7,7 +7,6 @@
 #include <costmap_2d/costmap_2d.h>
 #include <nav_core/base_global_planner.h>
 #include <geometry_msgs/PoseStamped.h>
-#include <actionlib_msgs/GoalStatusArray.h>
 #include <geometry_msgs/Twist.h>
 #include <angles/angles.h>
 #include <base_local_planner/world_model.h>
@@ -155,6 +154,13 @@ namespace shared_voronoi_global_planner
         double near_goal_threshold = 1.0;
 
         /**
+         * When the robot is within this threshold distance from the goal, no more replanning wil be done if there are already paths.
+         * Previous paths will be returned instead. This is to allow move_base to trigger "goal reached" by reducing resources
+         * used by global planner
+         **/
+        double xy_goal_tolerance = 0.15;
+
+        /**
          * If there are multiple paths that are less than this threshold (%) greater than the best matching path, then those
          * paths will also be considered during path selection. ie, if there are 4 paths, and user selects a direction, if the 
          * match cost of those 4 paths to the user's direction are [1, 1.1, 1.5, 2.3], then path 1 and 2 will be considered.
@@ -238,11 +244,6 @@ namespace shared_voronoi_global_planner
          * Callback for local costmap, if subscribed
          **/
         void localCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg);
-
-        /**
-         * Callback for status of move_base
-         **/
-        void moveBaseStatusCB(const actionlib_msgs::GoalStatusArray::ConstPtr &msg);
 
         /**
          * Callback for global costmap

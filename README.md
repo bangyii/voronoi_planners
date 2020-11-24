@@ -76,6 +76,8 @@ A* path finding algorithm with Euclidean distance heuristics is used to find the
 
 `static_global_map:` Whether the global map is static, ie not running mapping. If this is set to false, then *update_voronoi_rate* needs to be set to greater than 0
 
+`xy_goal_tolerance:` If the robot is within this distance (m) from the goal, and there are already paths found from a previous time step, the global planner will not do any replanning and instead just return the paths found in previous time step. This is to overcome the issue where if the global planner's replanning rate is too high, move base is unable to trigger "GOAL REACHED" even when already at the goal.
+
 `selection_threshold:` Percentage threshold in float (1.2 = 120%) in which paths with matching scores within this threshold (compared to the closest matching path) will be added to the list of paths that could be selected. For example, given that there are 4 paths, and the user indicates a specific direction. After calculation how close each path's first segment matches the user's direction, a score array of [1, 1.1, 4, 3.3] is found. In this case, if this parameter is set to 1.2, paths 1 and 2 (scores 1 and 1.1) will be added to list of paths to be considered. 
 
 Scaled score of path 1 is 1, because it has the minimum score. Whereas scaled score of path 2 is 1.1/1 (this path's match score / shortest path's match score).
