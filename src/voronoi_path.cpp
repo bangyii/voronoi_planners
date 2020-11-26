@@ -379,9 +379,6 @@ namespace voronoi_path
     //Iterative trimming of path
     bool voronoi_path::contractPath(std::vector<GraphNode> &path)
     {
-        //Index of node that collides with the anchor node
-        int collision_node = 0;
-
         //Anchor node that is being used to check for collision
         int anchor_node = 0;
 
@@ -389,26 +386,32 @@ namespace voronoi_path
         int future_anchor_node = 0;
 
         //While collision node has not reached the last node
-        while (collision_node < path.size() - 1)
+        while (anchor_node < path.size() - 1)
         {
             //From anchor_node, traverse path until there is a collision, set that as the collision node
             //Trim nodes except start and end nodes
-            int connected_node = path.size() - 1;
             int i;
-            for (i = anchor_node + 1; i < path.size() - 1; ++i)
+
+            //Connected node is the node that anchor_node will be joined to
+            int connected_node = path.size() - 1;
+
+            //Index of node that collides with the anchor node
+            int collision_node = path.size() - 1;
+            for (i = anchor_node + 1; i < path.size(); ++i)
             {
                 //If collision with node i occurs, then set the connected point as the node before i
                 if (edgeCollides(path[anchor_node], path[i], trimming_collision_threshold))
                 {
-                    // std::cout << "Collision at node: " << i << "\n";
+                    collision_node = i;
                     connected_node = i - 1;
                     break;
                 }
             }
-            collision_node = i;
+            
+            //Preemptively set future_anchor_node, if another is found later on, this will be corrected
             future_anchor_node = collision_node;
 
-            //Between anchor_node and collision node - 1, project point onto straight line connection anchor node to collision node - 1
+            //Between anchor_node and connected_node, project point onto straight line connection anchor node to collision node - 1
             //Project trimmable poses on the path onto the straight line between anchor_node and connected_point
             double gradient, inv_gradient;
             try
@@ -421,8 +424,8 @@ namespace voronoi_path
                 std::cout << "Calculate gradient exception: " << e.what() << "\n";
             }
 
+            //Project points between anchor_node and connected_node (exclusive) onto the line joining anchor_node and connected_node
             for (int j = anchor_node + 1; j < connected_node; ++j)
-            // while (node_to_modify < path.end() - 1 && i > 1)
             {
                 if (j >= path.size())
                     break;
@@ -436,33 +439,29 @@ namespace voronoi_path
                 double a2 = -inv_gradient;
                 double determinant = a1 - a2;
 
-                double x = path[j].x;
-                double y = path[j].y;
-
-                if (determinant != 0)
+                if (determinant != 0.0)
                 {
-                    x = (c1 - c2) / determinant;
-                    y = (a1 * c2 - a2 * c1) / determinant;
+                    path[j].x = (c1 - c2) / determinant;
+                    path[j].y = (a1 * c2 - a2 * c1) / determinant;
                 }
 
                 //If point is not on segment between anchor point and connected point, delete the point
-                if ((x - path[connected_node].x) * (x - path[anchor_node].x) >= 0.0)
+                if ((path[j].x - path[connected_node].x) * (path[j].x - path[anchor_node].x) >= 0.0)
                 {
+                    //Decrement post deletion because the for loop will increment this again later
                     j = std::distance(path.begin(), path.erase(path.begin() + j)) - 1;
 
-                    //Decrement connected_node and collision_node because a node before connected_node has been erased
+                    //Decrement connected_node, future_anchor_node, collision_node because a node before connected_node has been erased
                     --connected_node;
                     --collision_node;
+                    --future_anchor_node;
 
                     continue;
                 }
 
-                path[j].x = x;
-                path[j].y = y;
-
                 // Also find the future anchor node, definition of future anchor node is the node that can be connected to collision node, without collision
-                // If currently modified node has no collision with collision node, then it is the future anchor, only set this once
-                if (collision_node != path.size() - 1 && !edgeCollides(path[j], path[collision_node], trimming_collision_threshold))
+                // If currently modified node has no collision with collision node, then it is the future anchor, break once set
+                if (!edgeCollides(path[j], path[collision_node], trimming_collision_threshold))
                 {
                     future_anchor_node = j;
                     break;
@@ -564,6 +563,42 @@ namespace voronoi_path
         std::vector<std::vector<GraphNode>> replanned_paths(previous_paths);
         for (int i = 0; i < replanned_paths.size(); ++i)
         {
+            // double dir = 0;
+            // //Search surrounding area that decreases cost the most
+            // if(edgeCollides(start, start, trimming_collision_threshold))
+            // {
+            //     int d_cost = 0;
+            //     int curr_pixel = floor(start.x) + floor(start.y) * map_ptr->width;
+            //     // int distance = search_radius / map_ptr->resolution;
+            //     int distance = 10;
+            //     //Cannot start from negative pixels
+            //     for(int x_coord = -distance; x_coord <= distance; ++x_coord)
+            //     {
+            //         if(d_cost != 0)
+            //             break;
+
+            //         for(int y_coord = -distance; y_coord <= distance; ++y_coord)
+            //         {
+            //             //Skip comparing with own cell
+            //             if(x_coord == 0 && y_coord == 0)
+            //                 continue;
+
+            //             int pixel = floor(start.x + x_coord) + floor(start.y + y_coord) * map_ptr->width;
+            //             if(pixel < map_ptr->data.size())
+            //             {
+            //                 int temp_d_cost = map_ptr->data[pixel] - map_ptr->data[curr_pixel];
+            //                 if(temp_d_cost < d_cost)
+            //                 {
+            //                     d_cost = temp_d_cost;
+            //                     dir = atan2(y_coord, x_coord);
+            //                 }
+            //             }
+            //         }
+            //     }
+
+            //     std::cout << dir << "\t" << d_cost << "\n";
+            // }
+
             //Search nearby area around robot to find an empty cell to connect to the previous path
             //FIXME: For some reason, if collision is found and a new start point is found, some
             //paths still have collision with the new start point, even tho theoretically all first poses
@@ -581,14 +616,12 @@ namespace voronoi_path
                     double increment = 1.0 / current_radius;
                     while (current_angle < 2 * M_PI && !found_new_start)
                     {
-                        double x = start.x + cos(current_angle) * current_radius;
-                        double y = start.y + sin(current_angle) * current_radius;
-
-                        GraphNode candidate_start(x, y);
+                        GraphNode candidate_start(start.x + cos(current_angle) * current_radius, start.y + sin(current_angle) * current_radius);
                         if (!edgeCollides(candidate_start, replanned_paths[i][0], trimming_collision_threshold))
                         {
-                            //TODO: Add buffer to reduce chances of path getting stuck
-                            start = candidate_start + GraphNode(cos(current_angle) * 3, sin(current_angle) * 3);
+                            //TODO: Check in which direction will bring the candidate start further away from the obstacle, place the new node further away
+                            start = candidate_start;
+
                             found_new_start = true;
                         }
 
@@ -1374,10 +1407,15 @@ namespace voronoi_path
 
     bool voronoi_path::edgeCollides(const GraphNode &start, const GraphNode &end, int threshold)
     {
+        //Check start and end cells first
+        if(map_ptr->data.at(floor(start.x) + floor(start.y) * map_ptr->width) > threshold)
+            return true;
+
+        if(map_ptr->data.at(floor(end.x) + floor(end.y) * map_ptr->width) > threshold)
+            return true;
+
         double steps = 0;
         double distance = sqrt(pow(start.x - end.x, 2) + pow(start.y - end.y, 2));
-        double curr_x, curr_y;
-        int pixel;
 
         if (distance > line_check_resolution)
             steps = distance / line_check_resolution;
@@ -1390,13 +1428,13 @@ namespace voronoi_path
 
         while (curr_step <= 1.0)
         {
-            curr_x = (1.0 - curr_step) * start.x + curr_step * end.x;
-            curr_y = (1.0 - curr_step) * start.y + curr_step * end.y;
+            double curr_x = (1.0 - curr_step) * start.x + curr_step * end.x;
+            double curr_y = (1.0 - curr_step) * start.y + curr_step * end.y;
 
-            pixel = int(curr_x) + int(curr_y) * map_ptr->width;
+            int pixel = floor(curr_x) + floor(curr_y) * map_ptr->width;
             if (pixel < map_ptr->data.size())
             {
-                if (map_ptr->data.at(pixel) > threshold)
+                if (map_ptr->data[pixel] > threshold)
                     return true;
             }
 
