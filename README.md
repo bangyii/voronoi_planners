@@ -7,6 +7,16 @@ This is done using the JCash Voronoi C implementation (https://github.com/JCash/
 
 A* path finding algorithm with Euclidean distance heuristics is used to find the shortest path, subsequent k-th shortest paths are found using Yen's algorithm.
 
+## Example Images
+
+![Voronoi Edges](images/voronoi_edges_small.png "Voronoi Edges After Cleanup")
+
+Image above shows the voronoi edges that are generated and used for planning. Red dots indicates nodes that are only connected to 1 other node. Blue lines are the voronoi edges. Green dots are points that lie on obstacles which will later be used to calculate the path's homotopy class.
+
+![Alternate Paths](images/alternate_paths_small.png "Alternate Paths Generated")
+
+Image above shows all the alternate paths that are generated using the voronoi diagram. In this example, 10 paths are generated. The different colors represent the different classes in distinct homotopy classes
+
 ## Subscribers
 `/move_base/global_costmap/costmap [nav_msgs/OccupancyGrid]:` Subcribes to global costmap to generate voronoi diagram
 
