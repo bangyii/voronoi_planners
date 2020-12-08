@@ -21,6 +21,7 @@ find_package(catkin REQUIRED COMPONENTS
   visualization_msgs
   actionlib_msgs
   tf2_ros
+  message_generation
 )
 
 find_package(OpenCV 3 REQUIRED)
@@ -59,11 +60,15 @@ find_package(OpenCV 3 REQUIRED)
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(
+  FILES
+  AdjacencyNodes.msg
+  NodeInfo.msg
+  AdjacencyList.msg
+  NodeInfoList.msg
+  SortedNodeInfo.msg
+  SortedNodesList.msg
+)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -80,10 +85,9 @@ find_package(OpenCV 3 REQUIRED)
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   nav_msgs
-# )
+generate_messages(
+  DEPENDENCIES
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -117,7 +121,7 @@ find_package(OpenCV 3 REQUIRED)
 catkin_package(
 INCLUDE_DIRS include
 #  LIBRARIES shared_voronoi_global_planner
-#  CATKIN_DEPENDS nav_msgs roscpp
+ CATKIN_DEPENDS nav_msgs roscpp message_runtime
 #  DEPENDS system_lib
 )
 

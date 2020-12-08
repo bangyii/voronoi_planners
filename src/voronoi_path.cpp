@@ -312,6 +312,17 @@ namespace voronoi_path
         return adj_list;
     }
 
+    std::vector<GraphNode> voronoi_path::getNodeInfo()
+    {
+        std::lock_guard<std::mutex> lock(voronoi_mtx);
+        return node_inf;
+    }
+
+    std::vector<std::pair<double, int>> voronoi_path::getSortedNodeList()
+    {
+        return sorted_node_list;
+    }
+
     bool voronoi_path::getObstacleCentroids(std::vector<GraphNode> &centroids)
     {
         centroids.reserve(centers.size());
@@ -747,10 +758,12 @@ namespace voronoi_path
         double min_end_dist = std::numeric_limits<double>::infinity();
         start_node = -1;
         end_node = -1;
+        sorted_node_list.clear();
 
-        double ang, temp_end_dist, temp_start_dist;
+        double temp_end_dist, temp_start_dist;
         GraphNode curr;
 
+        //Traverse all nodes to find the one with minimum distance from start and end points
         for (int i = 0; i < num_nodes; ++i)
         {
             curr.x = node_inf[i].x;
@@ -758,6 +771,9 @@ namespace voronoi_path
 
             //If potential starting node brings robot towards end goal
             temp_start_dist = pow(curr.x - start.x, 2) + pow(curr.y - start.y, 2);
+
+            //Store list of distances to each node from current position
+            sorted_node_list.emplace_back(temp_start_dist, i);
             if (temp_start_dist < min_start_dist)
             {
                 if (!edgeCollides(start, curr, collision_threshold))
@@ -777,6 +793,11 @@ namespace voronoi_path
                 }
             }
         }
+
+        //Sort list of nodes and distance
+        sort(sorted_node_list.begin(), sorted_node_list.end(), [](std::pair<double, int> &left, std::pair<double, int> &right){
+            return left.first < right.first;
+        });
 
         //Failed to find start/end even after relaxation
         if (start_node == -1 || end_node == -1)

@@ -229,6 +229,9 @@ namespace shared_voronoi_global_planner
         ros::Publisher all_paths_pub;
         ros::Publisher user_direction_pub;
         ros::Publisher edges_viz_pub;
+        ros::Publisher adjacency_list_pub;
+        ros::Publisher sorted_nodes_pub;
+        ros::Publisher node_info_pub;
 
         /**
          * Timer for updating the voronoi diagram, if specified in rosparams

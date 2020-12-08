@@ -1,0 +1,1 @@
+int32[] adjacent_nodes

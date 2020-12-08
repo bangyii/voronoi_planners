@@ -9,6 +9,12 @@
 
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <shared_voronoi_global_planner/AdjacencyList.h>
+#include <shared_voronoi_global_planner/AdjacencyNodes.h>
+#include <shared_voronoi_global_planner/NodeInfo.h>
+#include <shared_voronoi_global_planner/NodeInfoList.h>
+#include <shared_voronoi_global_planner/SortedNodeInfo.h>
+#include <shared_voronoi_global_planner/SortedNodesList.h>
 
 PLUGINLIB_EXPORT_CLASS(shared_voronoi_global_planner::SharedVoronoiGlobalPlanner, nav_core::BaseGlobalPlanner)
 
@@ -51,15 +57,30 @@ namespace shared_voronoi_global_planner
         //Call voronoi object to update its internal voronoi diagram
         voronoi_path.mapToGraph(&map);
 
-        //Get obstacle centroids from map
-        std::vector<voronoi_path::GraphNode> centers;
-        voronoi_path.getObstacleCentroids(centers);
+        //Publish adjacency list and corresponding info to 
+        std::vector<std::vector<int>> adj_list_raw = voronoi_path.getAdjList();
+        std::vector<voronoi_path::GraphNode> node_inf_raw = voronoi_path.getNodeInfo();
+        shared_voronoi_global_planner::AdjacencyList adj_list;
+        shared_voronoi_global_planner::NodeInfoList node_info;
+        adj_list.nodes.resize(adj_list_raw.size());
+        node_info.node_info.resize(node_inf_raw.size());
+        for(int i = 0; i < node_inf_raw.size(); ++i)
+        {
+            adj_list.nodes[i].adjacent_nodes = adj_list_raw[i];
+            node_info.node_info[i].x = node_inf_raw[i].x * static_cast<double>(map.resolution) + map.origin.position.x;
+            node_info.node_info[i].y = node_inf_raw[i].y * static_cast<double>(map.resolution) + map.origin.position.y;
+        }
+
+        adjacency_list_pub.publish(adj_list);
+        node_info_pub.publish(node_info);
 
         //Publish visualization marker for use in rviz
         if (visualize_edges)
         {
             std::vector<voronoi_path::GraphNode> nodes;
             std::vector<voronoi_path::GraphNode> lonely_nodes;
+            std::vector<voronoi_path::GraphNode> centers;
+            voronoi_path.getObstacleCentroids(centers);
             voronoi_path.getEdges(nodes);
             voronoi_path.getDisconnectedNodes(lonely_nodes);
 
@@ -203,6 +224,9 @@ namespace shared_voronoi_global_planner
             all_paths_pub = nh.advertise<visualization_msgs::MarkerArray>("all_paths", 1);
             user_direction_pub = nh.advertise<visualization_msgs::Marker>("user_direction", 1);
             edges_viz_pub = nh.advertise<visualization_msgs::MarkerArray>("voronoi_edges", 1);
+            adjacency_list_pub = nh.advertise<shared_voronoi_global_planner::AdjacencyList>("adjacency_list", 1, true);
+            node_info_pub = nh.advertise<shared_voronoi_global_planner::NodeInfoList>("node_info", 1, true);
+            sorted_nodes_pub = nh.advertise<shared_voronoi_global_planner::SortedNodesList>("sorted_nodes", 1);
 
             //Create timer to update Voronoi diagram, use one shot timer if update rate is 0
             if (update_voronoi_rate != 0)
@@ -366,6 +390,17 @@ namespace shared_voronoi_global_planner
             viz_path.poses = plan;
             global_path_pub.publish(viz_path);
             prev_goal = end_point;
+
+            //Publish sorted vector of nodes that are nearby, distance is in square meters
+            std::vector<std::pair<double, int>> sorted_nodes_raw = voronoi_path.getSortedNodeList();
+            shared_voronoi_global_planner::SortedNodesList sorted_nodes;
+            sorted_nodes.sorted_nodes.resize(sorted_nodes_raw.size());
+            for(int i = 0; i <  sorted_nodes_raw.size(); ++i)
+            {
+                sorted_nodes.sorted_nodes[i].node = sorted_nodes_raw[i].second;
+                sorted_nodes.sorted_nodes[i].distance = sorted_nodes_raw[i].first * map.resolution * map.resolution;
+            }
+            sorted_nodes_pub.publish(sorted_nodes);
 
             return true;
         }
