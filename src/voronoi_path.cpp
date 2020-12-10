@@ -23,12 +23,29 @@ namespace voronoi_path
         if (map_ptr->data.size() != 0)
         {
             auto copy_time = std::chrono::system_clock::now();
-
             cv::Mat cv_map = cv::Mat(map_ptr->data).reshape(0, map_ptr->height);
             cv_map.convertTo(cv_map, CV_8UC1);
-
             //Downscale to increase contour finding speed
-            cv::resize(cv_map, cv_map, cv::Size(), open_cv_scale, open_cv_scale);
+            cv::resize(cv_map, cv_map, cv::Size(), open_cv_scale, open_cv_scale, cv::INTER_AREA);
+
+            // //Copy downsized map
+            // downsized_map.data.resize(cv_map.rows * cv_map.cols);
+            // if(cv_map.isContinuous())
+            // {
+            //     cv::Mat signed_mat;
+            //     cv_map.convertTo(signed_mat, CV_8SC1);
+            //     for(int i = 0; i < signed_mat.size().height * signed_mat.size().width; ++i)
+            //     {
+            //         if(signed_mat.at<signed char>(i) == -1)
+            //         {
+            //             std::cout << "Negative index: " << i << std::endl;
+            //             break;
+            //         }
+            //     }
+            //     downsized_map.data.assign(signed_mat.data, signed_mat.data + signed_mat.total());
+            // }
+
+            //Flip and transpose because image from map_server and actual map orientation is different
             cv::flip(cv_map, cv_map, 1);
             cv::transpose(cv_map, cv_map);
             cv::flip(cv_map, cv_map, 1);
@@ -103,11 +120,23 @@ namespace voronoi_path
     }
 
     bool voronoi_path::mapToGraph(Map *map_ptr_)
-    // bool voronoi_path::mapToGraph(const Map &map_)
     {
         auto start_time = std::chrono::system_clock::now();
 
         map_ptr = map_ptr_;
+
+        //Get centroids after map has been updated
+        findObstacleCentroids();
+        // if(!downsized_map.data.empty())
+        // {
+        //     map_ptr->data = downsized_map.data;
+        //     map_ptr->width *= open_cv_scale;
+        //     map_ptr->height *= open_cv_scale;
+        //     map_ptr->resolution /= open_cv_scale;
+        // }
+
+        // else
+        //     std::cout << "Failed to downsize map used for voronoi generation\n";
 
         //Lock mutex to ensure adj_list is not being used
         auto lock_start = std::chrono::system_clock::now();
@@ -296,9 +325,6 @@ namespace voronoi_path
             std::cout << "Convert to edges: \t" << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << "s\n";
         }
 
-        //Get centroids after map has been updated
-        findObstacleCentroids();
-
         num_nodes = adj_list.size();
 
         jcv_diagram_free(&diagram);
@@ -318,8 +344,19 @@ namespace voronoi_path
         return node_inf;
     }
 
-    std::vector<std::pair<double, int>> voronoi_path::getSortedNodeList()
+    std::vector<std::pair<double, int>> voronoi_path::getSortedNodeList(GraphNode position)
     {
+        sorted_node_list.clear();
+        double min_start_dist = std::numeric_limits<double>::infinity();
+
+        //Store list of distances to each node from current position
+        for (int i = 0; i < num_nodes; ++i)
+            sorted_node_list.emplace_back(pow(node_inf[i].x - position.x, 2) + pow(node_inf[i].y - position.y, 2), i);
+
+        //Sort list of nodes and distance
+        sort(sorted_node_list.begin(), sorted_node_list.end(), [](std::pair<double, int> &left, std::pair<double, int> &right){
+            return left.first < right.first;
+        });
         return sorted_node_list;
     }
 
@@ -758,7 +795,6 @@ namespace voronoi_path
         double min_end_dist = std::numeric_limits<double>::infinity();
         start_node = -1;
         end_node = -1;
-        sorted_node_list.clear();
 
         double temp_end_dist, temp_start_dist;
         GraphNode curr;
@@ -772,8 +808,6 @@ namespace voronoi_path
             //If potential starting node brings robot towards end goal
             temp_start_dist = pow(curr.x - start.x, 2) + pow(curr.y - start.y, 2);
 
-            //Store list of distances to each node from current position
-            sorted_node_list.emplace_back(temp_start_dist, i);
             if (temp_start_dist < min_start_dist)
             {
                 if (!edgeCollides(start, curr, collision_threshold))
@@ -793,11 +827,6 @@ namespace voronoi_path
                 }
             }
         }
-
-        //Sort list of nodes and distance
-        sort(sorted_node_list.begin(), sorted_node_list.end(), [](std::pair<double, int> &left, std::pair<double, int> &right){
-            return left.first < right.first;
-        });
 
         //Failed to find start/end even after relaxation
         if (start_node == -1 || end_node == -1)
@@ -1336,7 +1365,7 @@ namespace voronoi_path
                 int pixel = floor(edge_vector[i]->pos[j].x) + floor(edge_vector[i]->pos[j].y) * map_ptr->width;
 
                 //If vertex pixel in map is not free, remove this edge
-                if (map_ptr->data[pixel] > collision_threshold)
+                if (map_ptr->data[pixel] > collision_threshold || map_ptr->data[pixel] == -1)
                 {
                     delete_indices.push_back(i);
                     break;

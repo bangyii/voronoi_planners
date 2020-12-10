@@ -56,6 +56,17 @@ namespace shared_voronoi_global_planner
 
         //Call voronoi object to update its internal voronoi diagram
         voronoi_path.mapToGraph(&map);
+        nav_msgs::OccupancyGrid temp_map;
+        temp_map.data = map.data;
+        temp_map.info.resolution = map.resolution;
+        temp_map.info.width = map.width;
+        temp_map.info.height = map.height;
+        temp_map.header.frame_id = "map";
+        temp_map.header.stamp = ros::Time::now();
+        temp_map.info.origin.position.x = -100;
+        temp_map.info.origin.position.y = -100;
+        temp_map.info.origin.orientation.w = 1.0;
+        costmap_pub.publish(temp_map);
 
         //Publish adjacency list and corresponding info to 
         std::vector<std::vector<int>> adj_list_raw = voronoi_path.getAdjList();
@@ -197,6 +208,8 @@ namespace shared_voronoi_global_planner
             nh.getParam("selection_threshold", selection_threshold);
             nh.getParam("static_global_map", static_global_map);
             nh.getParam("xy_goal_tolerance", xy_goal_tolerance);
+            nh.getParam("odom_topic", odom_topic);
+            nh.getParam("sorted_nodes_dist_thresh", sorted_nodes_dist_thresh);
 
             //Set parameters for voronoi path object
             voronoi_path.h_class_threshold = h_class_threshold;
@@ -206,6 +219,7 @@ namespace shared_voronoi_global_planner
             voronoi_path.min_node_sep_sq = min_node_sep_sq;
             voronoi_path.trimming_collision_threshold = trimming_collision_threshold;
             voronoi_path.search_radius = search_radius;
+            voronoi_path.open_cv_scale = open_cv_scale;
 
             //Subscribe and advertise related topics
             global_costmap_sub = nh.subscribe("/move_base/global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);
@@ -219,14 +233,18 @@ namespace shared_voronoi_global_planner
             //Subscribe to joystick output to get direction selected by user
             user_vel_sub = nh.subscribe(joystick_topic, 1, &SharedVoronoiGlobalPlanner::cmdVelCB, this);
 
+            //Subscribe to odometry to make sure that sorted node list is updated
+            odom_sub = nh.subscribe(odom_topic, 1, &SharedVoronoiGlobalPlanner::odomCB, this);
+
             //Publisher for chosen path, all paths, user's indicated direction, and voronoi graph edges for visualization respectively
             global_path_pub = nh.advertise<nav_msgs::Path>("plan", 1);
             all_paths_pub = nh.advertise<visualization_msgs::MarkerArray>("all_paths", 1);
             user_direction_pub = nh.advertise<visualization_msgs::Marker>("user_direction", 1);
-            edges_viz_pub = nh.advertise<visualization_msgs::MarkerArray>("voronoi_edges", 1);
+            edges_viz_pub = nh.advertise<visualization_msgs::MarkerArray>("voronoi_edges", 1, true);
             adjacency_list_pub = nh.advertise<shared_voronoi_global_planner::AdjacencyList>("adjacency_list", 1, true);
             node_info_pub = nh.advertise<shared_voronoi_global_planner::NodeInfoList>("node_info", 1, true);
             sorted_nodes_pub = nh.advertise<shared_voronoi_global_planner::SortedNodesList>("sorted_nodes", 1);
+            costmap_pub = nh.advertise<nav_msgs::OccupancyGrid>("grid", 1);
 
             //Create timer to update Voronoi diagram, use one shot timer if update rate is 0
             if (update_voronoi_rate != 0)
@@ -390,17 +408,6 @@ namespace shared_voronoi_global_planner
             viz_path.poses = plan;
             global_path_pub.publish(viz_path);
             prev_goal = end_point;
-
-            //Publish sorted vector of nodes that are nearby, distance is in square meters
-            std::vector<std::pair<double, int>> sorted_nodes_raw = voronoi_path.getSortedNodeList();
-            shared_voronoi_global_planner::SortedNodesList sorted_nodes;
-            sorted_nodes.sorted_nodes.resize(sorted_nodes_raw.size());
-            for(int i = 0; i <  sorted_nodes_raw.size(); ++i)
-            {
-                sorted_nodes.sorted_nodes[i].node = sorted_nodes_raw[i].second;
-                sorted_nodes.sorted_nodes[i].distance = sorted_nodes_raw[i].first * map.resolution * map.resolution;
-            }
-            sorted_nodes_pub.publish(sorted_nodes);
 
             return true;
         }
@@ -600,5 +607,31 @@ namespace shared_voronoi_global_planner
     void SharedVoronoiGlobalPlanner::cmdVelCB(const geometry_msgs::Twist::ConstPtr &msg)
     {
         cmd_vel = *msg;
+    }
+
+    void SharedVoronoiGlobalPlanner::odomCB(const nav_msgs::Odometry::ConstPtr &msg)
+    {
+        //last_sorted_position pose will be 0 if it was not initialized before
+        double dist = pow(msg->pose.pose.position.x - last_sorted_position.pose.pose.position.x, 2) +
+                            pow(msg->pose.pose.position.y - last_sorted_position.pose.pose.position.y, 2);
+
+        //Greater than threshold, time to update sorted nodes list
+        if(last_sorted_position.header.frame_id.empty() || dist > pow(sorted_nodes_dist_thresh, 2))
+        {
+            sorted_nodes_raw = voronoi_path.getSortedNodeList(voronoi_path::GraphNode(msg->pose.pose.position.x, msg->pose.pose.position.y));
+
+            if(!sorted_nodes_raw.empty())
+                last_sorted_position = *msg;
+
+            //Publish sorted vector of nodes that are nearby, distance is in square meters
+            shared_voronoi_global_planner::SortedNodesList sorted_nodes;
+            sorted_nodes.sorted_nodes.resize(sorted_nodes_raw.size());
+            for(int i = 0; i <  sorted_nodes_raw.size(); ++i)
+            {
+                sorted_nodes.sorted_nodes[i].node = sorted_nodes_raw[i].second;
+                sorted_nodes.sorted_nodes[i].distance = sorted_nodes_raw[i].first * map.resolution * map.resolution;
+            }
+            sorted_nodes_pub.publish(sorted_nodes);
+        }
     }
 } // namespace shared_voronoi_global_planner

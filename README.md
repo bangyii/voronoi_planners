@@ -93,3 +93,7 @@ Image above shows all the alternate paths that are generated using the voronoi d
 Scaled score of path 1 is 1, because it has the minimum score. Whereas scaled score of path 2 is 1.1/1 (this path's match score / shortest path's match score).
 
 Among the list of paths to be considered, the path that is physically shorter will be selected. This parameter aims to solve the issue where if there were several paths with identical starting segments, it's more likely the user would select the path that is shorter in that direction, instead of the longer one.
+
+`odom_topic:` Odometry topic. Used to subscribe to position of robot
+
+`sorted_nodes_dist_thresh:` This threshold determines how often the sorted nodes list topic is published. When the robot's current position is this threshold away from the previous time that sorted nodes was published, then sorted nodes will be updated and republished again. Units (m)

@@ -1,5 +1,6 @@
 #include <ros/ros.h>
 #include <nav_msgs/OccupancyGrid.h>
+#include <nav_msgs/Odometry.h>
 #include <map_msgs/OccupancyGridUpdate.h>
 #include "voronoi_path.h"
 
@@ -185,6 +186,16 @@ namespace shared_voronoi_global_planner
         std::string joystick_topic = "/joy_vel";
 
         /**
+         * Odometry topic
+         **/
+        std::string odom_topic = "/odom";
+
+        /**
+         * Update sorted nodes list distance threshold. When robot is this distance away from the previous update position, then list will update again
+         **/
+        double sorted_nodes_dist_thresh = 0.3;
+
+        /**
          * Whether to publish markers to visualize the voronoi diagram's edges, lonely nodes in the voronoi diagram (singly connected),
          * and centroids of obstacles
          **/
@@ -210,6 +221,16 @@ namespace shared_voronoi_global_planner
          * done, instead of replanning from previous time step
          **/
         voronoi_path::GraphNode prev_goal;
+
+        /**
+         * Last position where sorted node list was computed
+         **/
+        nav_msgs::Odometry last_sorted_position;
+
+        /**
+         * Vector storing the sorted nodes list
+         **/
+        std::vector<std::pair<double, int>> sorted_nodes_raw;
         
         /**
          * Internal store of pixels that were modified during the last local costmap callback, used to restore the pixels in the following 
@@ -223,6 +244,7 @@ namespace shared_voronoi_global_planner
         ros::Subscriber global_costmap_sub;
         ros::Subscriber global_update_sub;
         ros::Subscriber user_vel_sub;
+        ros::Subscriber odom_sub;
         ros::Subscriber move_base_stat_sub;
 
         ros::Publisher global_path_pub;
@@ -232,6 +254,7 @@ namespace shared_voronoi_global_planner
         ros::Publisher adjacency_list_pub;
         ros::Publisher sorted_nodes_pub;
         ros::Publisher node_info_pub;
+        ros::Publisher costmap_pub;
 
         /**
          * Timer for updating the voronoi diagram, if specified in rosparams
@@ -262,6 +285,11 @@ namespace shared_voronoi_global_planner
          * Callback for Twist from joystick which indicates user direction
          **/
         void cmdVelCB(const geometry_msgs::Twist::ConstPtr &msg);
+
+        /**
+         * Callback for odometry
+         **/
+        void odomCB(const nav_msgs::Odometry::ConstPtr &msg);
 
         /**
          * Callback for timer event to periodically update the voronoi diagram, if update_voronoi_rate is > 0

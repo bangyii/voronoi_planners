@@ -4,11 +4,11 @@
 #define JC_VORONOI_IMPLEMENTATION
 
 //Uncomment to change voronoi calculations from floating point to double floating point
-// #define JCV_REAL_TYPE double
-// #define JCV_ATAN2 atan2
-// #define JCV_SQRT sqrt
-// #define JCV_FLT_MAX 1.7976931348623157E+308
-// #define JCV_PI 3.141592653589793115997963468544185161590576171875
+#define JCV_REAL_TYPE double
+#define JCV_ATAN2 atan2
+#define JCV_SQRT sqrt
+#define JCV_FLT_MAX 1.7976931348623157E+308
+#define JCV_PI 3.141592653589793115997963468544185161590576171875
 
 #include "jc_voronoi_clip.h"
 #include <chrono>
@@ -204,7 +204,7 @@ namespace voronoi_path
          * Returns a list of voronoi nodes sorted by distance from the current position of robot
          * @return vector of voronoi nodes sorted by ascending distance from current robot position
          **/
-        std::vector<std::pair<double, int>> getSortedNodeList();
+        std::vector<std::pair<double, int>> getSortedNodeList(GraphNode position);
 
         /**
          * Debugging method used to print all edges generated for voronoi graph
@@ -321,6 +321,8 @@ namespace voronoi_path
          * Pointer to map from the ROS side of planner
          **/
         Map* map_ptr;
+
+        Map downsized_map;
 
         /**
          * Vector storing sorted list of voronoi nodes square distances from the current robot position
