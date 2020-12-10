@@ -243,7 +243,7 @@ namespace shared_voronoi_global_planner
             edges_viz_pub = nh.advertise<visualization_msgs::MarkerArray>("voronoi_edges", 1, true);
             adjacency_list_pub = nh.advertise<shared_voronoi_global_planner::AdjacencyList>("adjacency_list", 1, true);
             node_info_pub = nh.advertise<shared_voronoi_global_planner::NodeInfoList>("node_info", 1, true);
-            sorted_nodes_pub = nh.advertise<shared_voronoi_global_planner::SortedNodesList>("sorted_nodes", 1);
+            sorted_nodes_pub = nh.advertise<shared_voronoi_global_planner::SortedNodesList>("sorted_nodes", 1, true);
             costmap_pub = nh.advertise<nav_msgs::OccupancyGrid>("grid", 1);
 
             //Create timer to update Voronoi diagram, use one shot timer if update rate is 0
