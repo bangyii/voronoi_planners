@@ -621,17 +621,19 @@ namespace shared_voronoi_global_planner
             sorted_nodes_raw = voronoi_path.getSortedNodeList(voronoi_path::GraphNode(msg->pose.pose.position.x, msg->pose.pose.position.y));
 
             if(!sorted_nodes_raw.empty())
+            {
                 last_sorted_position = *msg;
 
-            //Publish sorted vector of nodes that are nearby, distance is in square meters
-            shared_voronoi_global_planner::SortedNodesList sorted_nodes;
-            sorted_nodes.sorted_nodes.resize(sorted_nodes_raw.size());
-            for(int i = 0; i <  sorted_nodes_raw.size(); ++i)
-            {
-                sorted_nodes.sorted_nodes[i].node = sorted_nodes_raw[i].second;
-                sorted_nodes.sorted_nodes[i].distance = sorted_nodes_raw[i].first * map.resolution * map.resolution;
+                //Publish sorted vector of nodes that are nearby, distance is in square meters
+                shared_voronoi_global_planner::SortedNodesList sorted_nodes;
+                sorted_nodes.sorted_nodes.resize(sorted_nodes_raw.size());
+                for(int i = 0; i <  sorted_nodes_raw.size(); ++i)
+                {
+                    sorted_nodes.sorted_nodes[i].node = sorted_nodes_raw[i].second;
+                    sorted_nodes.sorted_nodes[i].distance = sorted_nodes_raw[i].first * map.resolution * map.resolution;
+                }
+                sorted_nodes_pub.publish(sorted_nodes);
             }
-            sorted_nodes_pub.publish(sorted_nodes);
         }
     }
 } // namespace shared_voronoi_global_planner
