@@ -68,14 +68,14 @@ namespace shared_voronoi_global_planner
         temp_map.info.origin.orientation.w = 1.0;
         costmap_pub.publish(temp_map);
 
-        //Publish adjacency list and corresponding info to 
+        //Publish adjacency list and corresponding info to
         std::vector<std::vector<int>> adj_list_raw = voronoi_path.getAdjList();
         std::vector<voronoi_path::GraphNode> node_inf_raw = voronoi_path.getNodeInfo();
         shared_voronoi_global_planner::AdjacencyList adj_list;
         shared_voronoi_global_planner::NodeInfoList node_info;
         adj_list.nodes.resize(adj_list_raw.size());
         node_info.node_info.resize(node_inf_raw.size());
-        for(int i = 0; i < node_inf_raw.size(); ++i)
+        for (int i = 0; i < node_inf_raw.size(); ++i)
         {
             adj_list.nodes[i].adjacent_nodes = adj_list_raw[i];
             node_info.node_info[i].x = node_inf_raw[i].x * static_cast<double>(map.resolution) + map.origin.position.x;
@@ -229,7 +229,7 @@ namespace shared_voronoi_global_planner
 
             if (subscribe_local_costmap)
                 local_costmap_sub = nh.subscribe("/move_base/local_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::localCostmapCB, this);
-                
+
             //Subscribe to joystick output to get direction selected by user
             user_vel_sub = nh.subscribe(joystick_topic, 1, &SharedVoronoiGlobalPlanner::cmdVelCB, this);
 
@@ -298,7 +298,7 @@ namespace shared_voronoi_global_planner
 
         //Send previous time steps' paths when too near to goal if there already paths found
         double dist = sqrt(pow(start_.pose.position.x - goal_.pose.position.x, 2) + pow(start_.pose.position.y - goal_.pose.position.y, 2));
-        if(dist < xy_goal_tolerance && all_paths_meters.size() > preferred_path)
+        if (dist < xy_goal_tolerance && all_paths_meters.size() > preferred_path)
         {
             plan = all_paths_meters[preferred_path];
         }
@@ -611,23 +611,46 @@ namespace shared_voronoi_global_planner
 
     void SharedVoronoiGlobalPlanner::odomCB(const nav_msgs::Odometry::ConstPtr &msg)
     {
+        //Convert odom from odom frame to map frame
+        tf2_ros::Buffer tf_buffer;
+        tf2_ros::TransformListener tf_listener(tf_buffer);
+        geometry_msgs::TransformStamped odom2maptf;
+        nav_msgs::Odometry msg_ = *msg;
+
+        try
+        {
+            odom2maptf = tf_buffer.lookupTransform(map.frame_id, msg_.header.frame_id, ros::Time(0), ros::Duration(1.0));
+        }
+        catch (tf2::TransformException &Exception)
+        {
+            ROS_ERROR_STREAM(Exception.what());
+            return;
+        }
+
+        geometry_msgs::Pose temp_odom;
+        temp_odom = msg_.pose.pose;
+        tf2::doTransform<geometry_msgs::Pose>(temp_odom, temp_odom, odom2maptf);
+        msg_.pose.pose = temp_odom;
+        
         //last_sorted_position pose will be 0 if it was not initialized before
-        double dist = pow(msg->pose.pose.position.x - last_sorted_position.pose.pose.position.x, 2) +
-                            pow(msg->pose.pose.position.y - last_sorted_position.pose.pose.position.y, 2);
+        double dist = pow(msg_.pose.pose.position.x - last_sorted_position.pose.pose.position.x, 2) +
+                      pow(msg_.pose.pose.position.y - last_sorted_position.pose.pose.position.y, 2);
 
         //Greater than threshold, time to update sorted nodes list
-        if(last_sorted_position.header.frame_id.empty() || dist > pow(sorted_nodes_dist_thresh, 2))
+        if (last_sorted_position.header.frame_id.empty() || dist > pow(sorted_nodes_dist_thresh, 2))
         {
-            sorted_nodes_raw = voronoi_path.getSortedNodeList(voronoi_path::GraphNode(msg->pose.pose.position.x, msg->pose.pose.position.y));
+            //Convert pose in map frame to costmap pixel image frame
+            sorted_nodes_raw = voronoi_path.getSortedNodeList(voronoi_path::GraphNode((msg_.pose.pose.position.x - map.origin.position.x) / map.resolution,
+                                                                                      (msg_.pose.pose.position.y - map.origin.position.y) / map.resolution));
 
-            if(!sorted_nodes_raw.empty())
+            if (!sorted_nodes_raw.empty())
             {
-                last_sorted_position = *msg;
+                last_sorted_position = msg_;
 
                 //Publish sorted vector of nodes that are nearby, distance is in square meters
                 shared_voronoi_global_planner::SortedNodesList sorted_nodes;
                 sorted_nodes.sorted_nodes.resize(sorted_nodes_raw.size());
-                for(int i = 0; i <  sorted_nodes_raw.size(); ++i)
+                for (int i = 0; i < sorted_nodes_raw.size(); ++i)
                 {
                     sorted_nodes.sorted_nodes[i].node = sorted_nodes_raw[i].second;
                     sorted_nodes.sorted_nodes[i].distance = sorted_nodes_raw[i].first * map.resolution * map.resolution;

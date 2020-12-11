@@ -71,7 +71,7 @@ namespace voronoi_path
 
                     if (j == contours[i].size() - 1)
                     {
-                        std::cout << "WARN: Could not find point on contour " << j << " which lies on the obstacle's inflation zone, path finding may not produce"; 
+                        std::cout << "WARN: Could not find point on contour " << j << " which lies on the obstacle's inflation zone, path finding may not produce";
                         std::cout << " paths that are strictly in different homotopy classes\n ";
                     }
                 }
@@ -288,7 +288,7 @@ namespace voronoi_path
             }
 
             //Once both node indices are found, add edge between the two nodes if they aren't the same node
-            if(node_index[0] != node_index[1])
+            if (node_index[0] != node_index[1])
             {
                 adj_list[node_index[0]].push_back(node_index[1]);
                 adj_list[node_index[1]].push_back(node_index[0]);
@@ -357,7 +357,7 @@ namespace voronoi_path
             sorted_node_list.emplace_back(pow(node_inf[i].x - position.x, 2) + pow(node_inf[i].y - position.y, 2), i);
 
         //Sort list of nodes and distance
-        sort(sorted_node_list.begin(), sorted_node_list.end(), [](std::pair<double, int> &left, std::pair<double, int> &right){
+        sort(sorted_node_list.begin(), sorted_node_list.end(), [](std::pair<double, int> &left, std::pair<double, int> &right) {
             return left.first < right.first;
         });
         return sorted_node_list;
@@ -458,7 +458,7 @@ namespace voronoi_path
                     break;
                 }
             }
-            
+
             //Preemptively set future_anchor_node, if another is found later on, this will be corrected
             future_anchor_node = collision_node;
 
@@ -694,21 +694,21 @@ namespace voronoi_path
 
         //Explore for potential paths in new homotopy classes
         std::vector<std::vector<GraphNode>> potential_paths = getPath(start, end, num_paths / 2);
-            
+
         //Calculate homotopy class of paths and compare it with the previous set of paths, remove any duplicates
         std::vector<std::complex<double>> previous_classes;
 
         auto path_it = replanned_paths.begin();
-        while(path_it < replanned_paths.end())
+        while (path_it < replanned_paths.end())
         {
             bool erased = false;
             previous_classes.push_back(calcHomotopyClass(*path_it));
 
             //Check all previous classes upto before the most recently added one
-            for(int i = 0; i < previous_classes.size() - 1; ++i)
-            {                    
+            for (int i = 0; i < previous_classes.size() - 1; ++i)
+            {
                 //If the most recent class is not unique and has been added before
-                if(!isClassDifferent(previous_classes.back(), previous_classes[i]))
+                if (!isClassDifferent(previous_classes.back(), previous_classes[i]))
                 {
                     //Erase non-unique path and pop back most recently added class
                     path_it = replanned_paths.erase(path_it);
@@ -718,7 +718,7 @@ namespace voronoi_path
                 }
             }
 
-            if(!erased)
+            if (!erased)
                 ++path_it;
         }
 
@@ -729,7 +729,7 @@ namespace voronoi_path
             for (int k = 0; k < previous_classes.size(); ++k)
             {
                 //Path is not unique
-                if(!isClassDifferent(temp_class, previous_classes[k]))
+                if (!isClassDifferent(temp_class, previous_classes[k]))
                     break;
 
                 //Path is unique since all paths have been checked
@@ -1150,7 +1150,7 @@ namespace voronoi_path
                 for (h = 0; h < homotopy_classes.size(); ++h)
                 {
                     //Path is not unique
-                    if(!isClassDifferent(curr_h_class, homotopy_classes[h]))
+                    if (!isClassDifferent(curr_h_class, homotopy_classes[h]))
                     {
                         //Erase and then break if not unique
                         it = cost_index_vec.erase(it);
@@ -1461,10 +1461,10 @@ namespace voronoi_path
     bool voronoi_path::edgeCollides(const GraphNode &start, const GraphNode &end, int threshold)
     {
         //Check start and end cells first
-        if(map_ptr->data.at(floor(start.x) + floor(start.y) * map_ptr->width) > threshold)
+        if (map_ptr->data.at(floor(start.x) + floor(start.y) * map_ptr->width) > threshold)
             return true;
 
-        if(map_ptr->data.at(floor(end.x) + floor(end.y) * map_ptr->width) > threshold)
+        if (map_ptr->data.at(floor(end.x) + floor(end.y) * map_ptr->width) > threshold)
             return true;
 
         double steps = 0;
