@@ -619,6 +619,13 @@ namespace shared_voronoi_global_planner
 
         try
         {
+            //Voronoi diagram not initialized yet, skip
+            if(map.frame_id.empty())
+            {
+                ROS_INFO("Internal map and voronoi diagram not initialized yet, skip publishing of sorted nodes");
+                return; 
+            }
+
             odom2maptf = tf_buffer.lookupTransform(map.frame_id, msg_.header.frame_id, ros::Time(0), ros::Duration(1.0));
         }
         catch (tf2::TransformException &Exception)
