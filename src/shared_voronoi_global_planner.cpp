@@ -210,6 +210,7 @@ namespace shared_voronoi_global_planner
             nh.getParam("xy_goal_tolerance", xy_goal_tolerance);
             nh.getParam("odom_topic", odom_topic);
             nh.getParam("sorted_nodes_dist_thresh", sorted_nodes_dist_thresh);
+            nh.getParam("lonely_branch_dist_threshold", lonely_branch_dist_threshold);
 
             //Set parameters for voronoi path object
             voronoi_path.h_class_threshold = h_class_threshold;
@@ -221,6 +222,7 @@ namespace shared_voronoi_global_planner
             voronoi_path.search_radius = search_radius;
             voronoi_path.open_cv_scale = open_cv_scale;
             voronoi_path.pixels_to_skip = pixels_to_skip;
+            voronoi_path.lonely_branch_dist_threshold = lonely_branch_dist_threshold;
 
             //Subscribe and advertise related topics
             global_costmap_sub = nh.subscribe("/move_base/global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);

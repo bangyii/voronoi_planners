@@ -102,6 +102,11 @@ namespace shared_voronoi_global_planner
         int trimming_collision_threshold = 75;
 
         /**
+         * Meters squared along a lonely branch to travel before aborting. If lonely branch is too long, it will not be pruned
+         **/
+        double lonely_branch_dist_threshold = 4;
+
+        /**
          * Pixels to skip during the reading of map to generate voronoi graph. Increasing pixels to skip reduces computation time
          * of voronoi generation, but also reduces voronoi diagram density, likely causing path finding issues
          **/
