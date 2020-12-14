@@ -568,7 +568,7 @@ namespace voronoi_path
          * @param cum_dist initialize with 0
          * @return bool indicating whether or not to prune this branch. Used in backtracking, and for notification only. No manual deletion needed
          **/
-        bool removeExcessBranch(int curr_node, int prev_node = -1, double cum_dist = 0);        
+        bool removeExcessBranch(std::vector<std::vector<int>> &ori_adj_list, int curr_node, int prev_node = -1, double cum_dist = 0);        
     };
 
 } // namespace voronoi_path

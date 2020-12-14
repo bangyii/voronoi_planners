@@ -311,6 +311,9 @@ namespace voronoi_path
 
         //Connect single edges to nearby node if <= node_connection_threshold_pix pixel distance
         int threshold = pow(node_connection_threshold_pix, 2);
+
+        //Duplicate adj_list for use in removing excess branches
+        auto ori_adj_list = adj_list;
         for (int i = 0; i < adj_list.size(); ++i)
         {
             //Singly connected node
@@ -333,7 +336,7 @@ namespace voronoi_path
 
                     //If singly connected node is unable to connect to anything else
                     if (j == node_inf.size() - 1)
-                        removeExcessBranch(i);
+                        removeExcessBranch(ori_adj_list, i);
                 }
             }
         }
@@ -1711,14 +1714,14 @@ namespace voronoi_path
         return std::abs(complex_1 - complex_2) / std::abs(complex_1) > h_class_threshold;
     }
 
-    bool voronoi_path::removeExcessBranch(int curr_node, int prev_node, double cum_dist)
+    bool voronoi_path::removeExcessBranch(std::vector<std::vector<int>> &ori_adj_list, int curr_node, int prev_node, double cum_dist)
     {
         //Branch is too long, break premptively
         if (cum_dist >= lonely_branch_dist_threshold / map_ptr->resolution / map_ptr->resolution)
             return false;
 
         //Reached branch node, or another lonely node. This means that this series of edges is disconnected from main graph
-        if (adj_list[curr_node].size() >= 3)
+        if (ori_adj_list[curr_node].size() >= 3)
         {
             //Delete the previous node from curr_node's adjacency list
             auto it = std::find(adj_list[curr_node].begin(), adj_list[curr_node].end(), prev_node);
@@ -1738,7 +1741,7 @@ namespace voronoi_path
                                pow(node_inf[adj_list[curr_node][i]].y - node_inf[curr_node].y, 2);
 
             //If branch node was found before reaching distance limit, then remove all adjacencies of curr_node, this branch is dead
-            if (removeExcessBranch(adj_list[curr_node][i], curr_node, temp_dist + cum_dist))
+            if (removeExcessBranch(ori_adj_list, adj_list[curr_node][i], curr_node, temp_dist + cum_dist))
             {
                 adj_list[curr_node].clear();
                 return true;
