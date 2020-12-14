@@ -97,3 +97,5 @@ Among the list of paths to be considered, the path that is physically shorter wi
 `odom_topic:` Odometry topic. Used to subscribe to position of robot
 
 `sorted_nodes_dist_thresh:` This threshold determines how often the sorted nodes list topic is published. When the robot's current position is this threshold away from the previous time that sorted nodes was published, then sorted nodes will be updated and republished again. Units (m)
+
+`lonely_branch_dist_threshold:` Meters squared threshold to traverse a lone branch before halting. If the threshold is not reached before reaching a branching node, then the entire lone branch will be deleted. Set to 0 to disable lone branch pruning.

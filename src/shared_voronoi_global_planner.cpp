@@ -41,8 +41,6 @@ namespace shared_voronoi_global_planner
                 r.sleep();
                 ros::spinOnce();
             }
-
-            ROS_WARN("Voronoi diagram initialized");
         }
 
         else
@@ -56,6 +54,8 @@ namespace shared_voronoi_global_planner
 
         //Call voronoi object to update its internal voronoi diagram
         voronoi_path.mapToGraph(&map);
+        ROS_WARN("Voronoi diagram initialized");
+
         nav_msgs::OccupancyGrid temp_map;
         temp_map.data = map.data;
         temp_map.info.resolution = map.resolution;
@@ -220,6 +220,7 @@ namespace shared_voronoi_global_planner
             voronoi_path.trimming_collision_threshold = trimming_collision_threshold;
             voronoi_path.search_radius = search_radius;
             voronoi_path.open_cv_scale = open_cv_scale;
+            voronoi_path.pixels_to_skip = pixels_to_skip;
 
             //Subscribe and advertise related topics
             global_costmap_sub = nh.subscribe("/move_base/global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);

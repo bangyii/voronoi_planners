@@ -28,22 +28,35 @@ namespace voronoi_path
             //Downscale to increase contour finding speed
             cv::resize(cv_map, cv_map, cv::Size(), open_cv_scale, open_cv_scale, cv::INTER_AREA);
 
-            // //Copy downsized map
-            // downsized_map.data.resize(cv_map.rows * cv_map.cols);
-            // if(cv_map.isContinuous())
-            // {
-            //     cv::Mat signed_mat;
-            //     cv_map.convertTo(signed_mat, CV_8SC1);
-            //     for(int i = 0; i < signed_mat.size().height * signed_mat.size().width; ++i)
-            //     {
-            //         if(signed_mat.at<signed char>(i) == -1)
-            //         {
-            //             std::cout << "Negative index: " << i << std::endl;
-            //             break;
-            //         }
-            //     }
-            //     downsized_map.data.assign(signed_mat.data, signed_mat.data + signed_mat.total());
-            // }
+            //Copy downsized map
+            downsized_map.data.resize(cv_map.rows * cv_map.cols);
+            if (cv_map.isContinuous())
+            {
+                downsized_map = *map_ptr;
+                downsized_map.origin.position.x = 0;
+                downsized_map.origin.position.y = 0;
+                downsized_map.width *= open_cv_scale;
+                downsized_map.height *= open_cv_scale;
+                downsized_map.resolution /= open_cv_scale;
+                downsized_map.data.clear();
+                downsized_map.data.assign(cv_map.data, cv_map.data + cv_map.total());
+
+                // //Copy over unknown pixels
+                // for(int i = 0; i < downsized_map.data.size(); ++i)
+                // {
+                //     int downsized_x = i % downsized_map.width;
+                //     int downsized_y = (int)(i / downsized_map.width);
+                //     int upsized_ind = (downsized_x + downsized_y * downsized_map.width) / open_cv_scale;
+                //     if(map_ptr->data[upsized_ind] == -1)
+                //     {
+                //         // std::cout << "Pixel: " << i << " should be -1\n";
+                //         downsized_map.data[i] = -1;
+                //     }
+
+                //     // else
+                //     //     std::cout << "Skipped pixel: " << i << "\n";
+                // }
+            }
 
             //Flip and transpose because image from map_server and actual map orientation is different
             cv::flip(cv_map, cv_map, 1);
@@ -128,6 +141,7 @@ namespace voronoi_path
         //Get centroids after map has been updated
         findObstacleCentroids();
         // if(!downsized_map.data.empty())
+        //     map_ptr = &downsized_map;
         // {
         //     map_ptr->data = downsized_map.data;
         //     map_ptr->width *= open_cv_scale;
@@ -305,18 +319,21 @@ namespace voronoi_path
                 //Check through all node_inf to see if there are any within distance threshold
                 for (int j = 0; j < node_inf.size(); ++j)
                 {
-                    //If the node being checked is i or is already connected to i
-                    if (j == i || std::find(adj_list[i].begin(), adj_list[i].end(), j) != adj_list[i].end())
+                    //If the node being checked is i or is already connected to i, adj_list[i] only has 1 element
+                    if (j == i || adj_list[i].back() == j)
                         continue;
 
                     double dist = pow(node_inf[j].x - node_inf[i].x, 2) + pow(node_inf[j].y - node_inf[i].y, 2);
-
                     if (dist <= threshold)
                     {
                         adj_list[i].push_back(j);
                         adj_list[j].push_back(i);
                         break;
                     }
+
+                    //If singly connected node is unable to connect to anything else
+                    if (j == node_inf.size() - 1)
+                        removeExcessBranch(i);
                 }
             }
         }
@@ -1692,5 +1709,43 @@ namespace voronoi_path
     bool voronoi_path::isClassDifferent(const std::complex<double> &complex_1, const std::complex<double> &complex_2)
     {
         return std::abs(complex_1 - complex_2) / std::abs(complex_1) > h_class_threshold;
+    }
+
+    bool voronoi_path::removeExcessBranch(int curr_node, int prev_node, double cum_dist)
+    {
+        //Branch is too long, break premptively
+        if (cum_dist >= lonely_branch_dist_threshold / map_ptr->resolution / map_ptr->resolution)
+            return false;
+
+        //Reached branch node, or another lonely node. This means that this series of edges is disconnected from main graph
+        if (adj_list[curr_node].size() >= 3)
+        {
+            //Delete the previous node from curr_node's adjacency list
+            auto it = std::find(adj_list[curr_node].begin(), adj_list[curr_node].end(), prev_node);
+            adj_list[curr_node].erase(it);
+            return true;
+        }
+
+        //Traverse all nodes connected to the current one
+        for (int i = 0; i < adj_list[curr_node].size(); ++i)
+        {
+            //Skip traversing where we came from
+            if (adj_list[curr_node][i] == prev_node)
+                continue;
+
+            //Get distance from curr_node to next node
+            double temp_dist = pow(node_inf[adj_list[curr_node][i]].x - node_inf[curr_node].x, 2) +
+                               pow(node_inf[adj_list[curr_node][i]].y - node_inf[curr_node].y, 2);
+
+            //If branch node was found before reaching distance limit, then remove all adjacencies of curr_node, this branch is dead
+            if (removeExcessBranch(adj_list[curr_node][i], curr_node, temp_dist + cum_dist))
+            {
+                adj_list[curr_node].clear();
+                return true;
+            }
+        }
+
+        //Should not reach here
+        return false;
     }
 } // namespace voronoi_path

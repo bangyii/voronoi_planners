@@ -316,6 +316,11 @@ namespace voronoi_path
          **/
         int node_connection_threshold_pix = 1;
 
+        /**
+         * Meters squared along a lonely branch to travel before aborting. If lonely branch is too long, it will not be pruned
+         **/
+        double lonely_branch_dist_threshold = 4;
+
     private:
         /**
          * Pointer to map from the ROS side of planner
@@ -554,6 +559,16 @@ namespace voronoi_path
          * @return bool indicating true if the 2 classes are unique
          **/
         bool isClassDifferent(const std::complex<double> &complex_1, const std::complex<double> &complex_2);
+
+        /**
+         * Traverses recursively a branch from dead end side towards branch side, if branch is found, then entire series of edges are removed
+         * If branch is not found before lonely_branch_dist_threshold, then branch is not removed
+         * @param curr_node initialize this witht the lonely node, the node at the dead end
+         * @param prev_node initialize with -1
+         * @param cum_dist initialize with 0
+         * @return bool indicating whether or not to prune this branch. Used in backtracking, and for notification only. No manual deletion needed
+         **/
+        bool removeExcessBranch(int curr_node, int prev_node = -1, double cum_dist = 0);        
     };
 
 } // namespace voronoi_path
