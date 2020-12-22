@@ -94,6 +94,21 @@ namespace voronoi_path
     };
 
     /**
+     * Struct to store vector of GraphNodes (a path) and its corresponding id
+     **/
+    struct Path
+    {
+        uint32_t id;
+        std::vector<std::vector<GraphNode>> path;
+        Path() : id(-1){}
+        Path(std::vector<std::vector<GraphNode>> && in_path)
+        {
+            id = -1;
+            path = in_path;
+        }
+    };
+
+    /**
      * Same structure as ROS's nav_msgs::OccupancyGrid type
      * Redefined here to decouple from ROS
      **/
@@ -411,6 +426,13 @@ namespace voronoi_path
         std::vector<double> previous_path_costs;
 
         //******************* Methods *******************/
+
+        /**
+         * Returns a unique ID for labelling paths generated since the start of the program.
+         * It is a monotically increasing counter
+         * @return uint32_t storing the ID
+         **/
+        uint32_t getUniqueID();
 
         /**
          * Find centroid of obstacles using opencv findContour(), uses data from 'map' variable

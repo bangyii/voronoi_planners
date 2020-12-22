@@ -18,6 +18,12 @@ namespace voronoi_path
         local_vertices = vertices;
     }
 
+    uint32_t voronoi_path::getUniqueID()
+    {
+        static uint32_t id = 0;
+        return id++;
+    }
+
     std::vector<std::complex<double>> voronoi_path::findObstacleCentroids()
     {
         if (map_ptr->data.size() != 0)
@@ -634,42 +640,6 @@ namespace voronoi_path
         std::vector<std::vector<GraphNode>> replanned_paths(previous_paths);
         for (int i = 0; i < replanned_paths.size(); ++i)
         {
-            // double dir = 0;
-            // //Search surrounding area that decreases cost the most
-            // if(edgeCollides(start, start, trimming_collision_threshold))
-            // {
-            //     int d_cost = 0;
-            //     int curr_pixel = floor(start.x) + floor(start.y) * map_ptr->width;
-            //     // int distance = search_radius / map_ptr->resolution;
-            //     int distance = 10;
-            //     //Cannot start from negative pixels
-            //     for(int x_coord = -distance; x_coord <= distance; ++x_coord)
-            //     {
-            //         if(d_cost != 0)
-            //             break;
-
-            //         for(int y_coord = -distance; y_coord <= distance; ++y_coord)
-            //         {
-            //             //Skip comparing with own cell
-            //             if(x_coord == 0 && y_coord == 0)
-            //                 continue;
-
-            //             int pixel = floor(start.x + x_coord) + floor(start.y + y_coord) * map_ptr->width;
-            //             if(pixel < map_ptr->data.size())
-            //             {
-            //                 int temp_d_cost = map_ptr->data[pixel] - map_ptr->data[curr_pixel];
-            //                 if(temp_d_cost < d_cost)
-            //                 {
-            //                     d_cost = temp_d_cost;
-            //                     dir = atan2(y_coord, x_coord);
-            //                 }
-            //             }
-            //         }
-            //     }
-
-            //     std::cout << dir << "\t" << d_cost << "\n";
-            // }
-
             //Search nearby area around robot to find an empty cell to connect to the previous path
             //FIXME: For some reason, if collision is found and a new start point is found, some
             //paths still have collision with the new start point, even tho theoretically all first poses

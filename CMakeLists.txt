@@ -68,6 +68,7 @@ add_message_files(
   NodeInfoList.msg
   SortedNodeInfo.msg
   SortedNodesList.msg
+  PathList.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -87,6 +88,8 @@ add_message_files(
 ## Generate added messages and services with any dependencies listed here
 generate_messages(
   DEPENDENCIES
+  nav_msgs
+  std_msgs
 )
 
 ################################################
