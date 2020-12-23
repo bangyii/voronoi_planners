@@ -17,7 +17,6 @@
 #include <vector>
 #include <string>
 #include <map>
-#include <atomic>
 #include <complex>
 #include <mutex>
 #include <memory>
@@ -99,11 +98,13 @@ namespace voronoi_path
     struct Path
     {
         uint32_t id;
-        std::vector<std::vector<GraphNode>> path;
+        std::vector<GraphNode> path;
+
+        //Constructors
         Path() : id(-1){}
-        Path(std::vector<std::vector<GraphNode>> && in_path)
+        Path(uint32_t _id, std::vector<GraphNode> && in_path)
         {
-            id = -1;
+            id = _id;
             path = in_path;
         }
     };
@@ -233,12 +234,12 @@ namespace voronoi_path
          * @param num_paths total number of paths to find. ie 2 will return the 2 (most likely) shortest paths
          * @return vector containing all the paths found
          **/
-        std::vector<std::vector<GraphNode>> getPath(const GraphNode &start, const GraphNode &end, const int &num_paths);
+        std::vector<Path> getPath(const GraphNode &start, const GraphNode &end, const int &num_paths);
 
         /**
          * Replan based on paths generated in the previous time step
          **/
-        std::vector<std::vector<GraphNode>> replan(GraphNode &start, GraphNode &end, int num_paths, int &pref_path);
+        std::vector<Path> replan(GraphNode &start, GraphNode &end, int num_paths, int &pref_path);
 
         /**
          * Set the location of local vertices. Vertices are in pixels, in global map's frame
@@ -251,7 +252,7 @@ namespace voronoi_path
          * @param paths vector of paths to be interpolated
          * @return boolean indicating success
          **/
-        bool bezierInterp(std::vector<std::vector<GraphNode>>& paths);
+        bool bezierInterp(std::vector<Path>& paths);
 
         /**
          * Clear the vector storing all previous paths
@@ -336,13 +337,16 @@ namespace voronoi_path
          **/
         double lonely_branch_dist_threshold = 4;
 
+        /**
+         * Minimum distance between poses on global path generated
+         **/
+        double path_waypoint_sep = 0.2;
+
     private:
         /**
          * Pointer to map from the ROS side of planner
          **/
         Map* map_ptr;
-
-        Map downsized_map;
 
         /**
          * Vector storing sorted list of voronoi nodes square distances from the current robot position
@@ -418,7 +422,7 @@ namespace voronoi_path
         /**
          * Vector to store all previously found paths for maintaining and trimming
          **/
-        std::vector<std::vector<GraphNode>> previous_paths;
+        std::vector<Path> previous_paths;
 
         /**
          * Vector storing all the costs of previous paths

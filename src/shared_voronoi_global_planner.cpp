@@ -1,4 +1,5 @@
 #include "shared_voronoi_global_planner.h"
+#include <profiler.h>
 #include <pluginlib/class_list_macros.h>
 #include <nav_msgs/Path.h>
 #include <tf/transform_datatypes.h>
@@ -15,6 +16,7 @@
 #include <shared_voronoi_global_planner/NodeInfoList.h>
 #include <shared_voronoi_global_planner/SortedNodeInfo.h>
 #include <shared_voronoi_global_planner/SortedNodesList.h>
+#include <shared_voronoi_global_planner/PathList.h>
 
 PLUGINLIB_EXPORT_CLASS(shared_voronoi_global_planner::SharedVoronoiGlobalPlanner, nav_core::BaseGlobalPlanner)
 
@@ -56,17 +58,17 @@ namespace shared_voronoi_global_planner
         voronoi_path.mapToGraph(&map);
         ROS_WARN("Voronoi diagram initialized");
 
-        nav_msgs::OccupancyGrid temp_map;
-        temp_map.data = map.data;
-        temp_map.info.resolution = map.resolution;
-        temp_map.info.width = map.width;
-        temp_map.info.height = map.height;
-        temp_map.header.frame_id = "map";
-        temp_map.header.stamp = ros::Time::now();
-        temp_map.info.origin.position.x = -100;
-        temp_map.info.origin.position.y = -100;
-        temp_map.info.origin.orientation.w = 1.0;
-        costmap_pub.publish(temp_map);
+        // nav_msgs::OccupancyGrid temp_map;
+        // temp_map.data = map.data;
+        // temp_map.info.resolution = map.resolution;
+        // temp_map.info.width = map.width;
+        // temp_map.info.height = map.height;
+        // temp_map.header.frame_id = "map";
+        // temp_map.header.stamp = ros::Time::now();
+        // temp_map.info.origin.position.x = -100;
+        // temp_map.info.origin.position.y = -100;
+        // temp_map.info.origin.orientation.w = 1.0;
+        // costmap_pub.publish(temp_map);
 
         //Publish adjacency list and corresponding info to
         std::vector<std::vector<int>> adj_list_raw = voronoi_path.getAdjList();
@@ -211,6 +213,7 @@ namespace shared_voronoi_global_planner
             nh.getParam("odom_topic", odom_topic);
             nh.getParam("sorted_nodes_dist_thresh", sorted_nodes_dist_thresh);
             nh.getParam("lonely_branch_dist_threshold", lonely_branch_dist_threshold);
+            nh.getParam("path_waypoint_sep", path_waypoint_sep);
 
             //Set parameters for voronoi path object
             voronoi_path.h_class_threshold = h_class_threshold;
@@ -223,6 +226,7 @@ namespace shared_voronoi_global_planner
             voronoi_path.open_cv_scale = open_cv_scale;
             voronoi_path.pixels_to_skip = pixels_to_skip;
             voronoi_path.lonely_branch_dist_threshold = lonely_branch_dist_threshold;
+            voronoi_path.path_waypoint_sep = path_waypoint_sep;
 
             //Subscribe and advertise related topics
             global_costmap_sub = nh.subscribe("/move_base/global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);
@@ -239,15 +243,19 @@ namespace shared_voronoi_global_planner
             //Subscribe to odometry to make sure that sorted node list is updated
             odom_sub = nh.subscribe(odom_topic, 1, &SharedVoronoiGlobalPlanner::odomCB, this);
 
-            //Publisher for chosen path, all paths, user's indicated direction, and voronoi graph edges for visualization respectively
+            //Visualization topics
+            all_paths_pub = nh.advertise<visualization_msgs::MarkerArray>("all_paths_viz", 1);
+            user_direction_pub = nh.advertise<visualization_msgs::Marker>("user_direction_viz", 1);
+            edges_viz_pub = nh.advertise<visualization_msgs::MarkerArray>("voronoi_edges_viz", 1, true);
+
+            //Plan and voronoi diagram related topics
             global_path_pub = nh.advertise<nav_msgs::Path>("plan", 1);
-            all_paths_pub = nh.advertise<visualization_msgs::MarkerArray>("all_paths", 1);
-            user_direction_pub = nh.advertise<visualization_msgs::Marker>("user_direction", 1);
-            edges_viz_pub = nh.advertise<visualization_msgs::MarkerArray>("voronoi_edges", 1, true);
             adjacency_list_pub = nh.advertise<shared_voronoi_global_planner::AdjacencyList>("adjacency_list", 1, true);
             node_info_pub = nh.advertise<shared_voronoi_global_planner::NodeInfoList>("node_info", 1, true);
             sorted_nodes_pub = nh.advertise<shared_voronoi_global_planner::SortedNodesList>("sorted_nodes", 1, true);
-            costmap_pub = nh.advertise<nav_msgs::OccupancyGrid>("grid", 1);
+            all_paths_ind_pub = nh.advertise<shared_voronoi_global_planner::PathList>("all_paths", 1);
+
+            // costmap_pub = nh.advertise<nav_msgs::OccupancyGrid>("grid", 1);
 
             //Create timer to update Voronoi diagram, use one shot timer if update rate is 0
             if (update_voronoi_rate != 0)
@@ -264,9 +272,8 @@ namespace shared_voronoi_global_planner
 
     bool SharedVoronoiGlobalPlanner::makePlan(const geometry_msgs::PoseStamped &start, const geometry_msgs::PoseStamped &goal, std::vector<geometry_msgs::PoseStamped> &plan)
     {
-        static std::vector<std::vector<voronoi_path::GraphNode>> all_paths;
+        static std::vector<voronoi_path::Path> all_paths;
         static std::vector<std::vector<geometry_msgs::PoseStamped>> all_paths_meters;
-
         //Transform goal and start to map frame if they are not already in map frame
         geometry_msgs::PoseStamped start_ = start;
         geometry_msgs::PoseStamped goal_ = goal;
@@ -310,8 +317,8 @@ namespace shared_voronoi_global_planner
         else if (voronoi_path.hasPreviousPaths() && prev_goal == end_point)
         {
             all_paths = voronoi_path.replan(start_point, end_point, num_paths, preferred_path);
-            if (!voronoi_path.bezierInterp(all_paths))
-                ROS_DEBUG("Bezier interpolation failed, original path already collides with obstacle");
+            // if (!voronoi_path.bezierInterp(all_paths))
+            //     ROS_DEBUG("Bezier interpolation failed, original path already collides with obstacle");
         }
 
         //move_base was not running, there are no previous paths. So planning should be done from scratch
@@ -324,8 +331,8 @@ namespace shared_voronoi_global_planner
 
             //TODO: What is the purpose of this?
             //Smooth the path received from voronoi planner, return true when fail so the global planner can try replanning/update position
-            if (!voronoi_path.bezierInterp(all_paths))
-                ROS_DEBUG("Bezier interpolation failed, original path already collides with obstacle");
+            // if (!voronoi_path.bezierInterp(all_paths))
+            //     ROS_DEBUG("Bezier interpolation failed, original path already collides with obstacle");
         }
 
         if (all_paths.size() < num_paths)
@@ -363,12 +370,12 @@ namespace shared_voronoi_global_planner
                 }
 
                 //Loop through all the nodes for path i
-                for (int j = 0; j < all_paths[i].size(); ++j)
+                for (int j = 0; j < all_paths[i].path.size(); ++j)
                 {
                     geometry_msgs::PoseStamped new_pose;
                     new_pose.header = header;
-                    new_pose.pose.position.x = all_paths[i][j].x * map.resolution + map.origin.position.x;
-                    new_pose.pose.position.y = all_paths[i][j].y * map.resolution + map.origin.position.y;
+                    new_pose.pose.position.x = all_paths[i].path[j].x * map.resolution + map.origin.position.x;
+                    new_pose.pose.position.y = all_paths[i].path[j].y * map.resolution + map.origin.position.y;
                     new_pose.pose.position.z = 0;
 
                     //TODO: Set orientation of intermediate poses
@@ -405,13 +412,26 @@ namespace shared_voronoi_global_planner
                 plan = all_paths_meters[preferred_path];
 
             //Publish selected plan for visualization
-            nav_msgs::Path viz_path;
-            viz_path.header.stamp = ros::Time::now();
-            viz_path.header.frame_id = map.frame_id;
-            viz_path.poses = plan;
-            global_path_pub.publish(viz_path);
-            prev_goal = end_point;
+            nav_msgs::Path global_path;
+            global_path.header.stamp = ros::Time::now();
+            global_path.header.frame_id = map.frame_id;
+            global_path.poses = plan;
+            global_path_pub.publish(global_path);
 
+            //Publish all generated paths
+            shared_voronoi_global_planner::PathList path_list;
+            for(int i = 0; i < all_paths_meters.size(); ++i)
+            {
+                nav_msgs::Path temp_path;
+                temp_path.header.stamp = ros::Time::now();
+                temp_path.header.frame_id = map.frame_id;
+                temp_path.header.seq = all_paths[i].id;
+                temp_path.poses = all_paths_meters[i];
+                path_list.paths.emplace_back(std::move(temp_path));
+            }
+            all_paths_ind_pub.publish(path_list);
+
+            prev_goal = end_point;
             return true;
         }
 

@@ -215,6 +215,11 @@ namespace shared_voronoi_global_planner
          * Parameter to set whether global map is static (no mapping is being run)
          **/
         bool static_global_map = true;
+        
+        /**
+         * Minimum distance between poses on global path generated
+         **/
+        double path_waypoint_sep = 0.2;
 
         /**
          * Interval variable to store the preffered path from previous time step. Defaults to 0 which is the shortest path
@@ -260,6 +265,7 @@ namespace shared_voronoi_global_planner
         ros::Publisher sorted_nodes_pub;
         ros::Publisher node_info_pub;
         ros::Publisher costmap_pub;
+        ros::Publisher all_paths_ind_pub;
 
         /**
          * Timer for updating the voronoi diagram, if specified in rosparams

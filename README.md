@@ -31,11 +31,13 @@ Image above shows all the alternate paths that are generated using the voronoi d
 
 `~/plan [nav_msgs/Path]:` Currently selected path that is being sent to the local planner for execution.
 
-`~/all_paths [visualization_msgs::MarkerArray]:` Visualization markers for all paths generated.
+`~/all_paths_viz [visualization_msgs::MarkerArray]:` Visualization markers for all paths generated.
+
+`~/all_paths [shared_voronoi_global_planner::PathList]:` All paths that were generated, along with their unique IDs
 
 `~/user_direction [visualization_msgs::Marker]:` Visualization marker for the current user direction.
 
-`~/voronoi_edges [visualization_msgs::MarkerArray]:` Visualization markers for voronoi edges and singly connected nodes (red points on the map).
+`~/voronoi_edges_viz [visualization_msgs::MarkerArray]:` Visualization markers for voronoi edges and singly connected nodes (red points on the map).
 
 ## Parameters
 `occupancy_threshold:` Integer threshold of costmap pixels before it is considered an occupied cell, which will then be used to generate the voronoi diagram.
@@ -99,3 +101,5 @@ Among the list of paths to be considered, the path that is physically shorter wi
 `sorted_nodes_dist_thresh:` This threshold determines how often the sorted nodes list topic is published. When the robot's current position is this threshold away from the previous time that sorted nodes was published, then sorted nodes will be updated and republished again. Units (m)
 
 `lonely_branch_dist_threshold:` Meters squared threshold to traverse a lone branch before halting. If the threshold is not reached before reaching a branching node, then the entire lone branch will be deleted. Set to 0 to disable lone branch pruning.
+
+`path_waypoint_sep:` Minimum distance between waypoints of global path, if 2 waypoints are closer than this separation, they will be deleted. This parameter does not guarantee that waypoints on paths generated are uniformly separated based on this value. Increasing this separation reduces replanning time. Units(m)
