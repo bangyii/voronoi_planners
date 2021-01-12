@@ -12,6 +12,7 @@
 #include <angles/angles.h>
 #include <base_local_planner/world_model.h>
 #include <base_local_planner/costmap_model.h>
+#include <std_msgs/UInt32.h>
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -256,6 +257,7 @@ namespace shared_voronoi_global_planner
         ros::Subscriber user_vel_sub;
         ros::Subscriber odom_sub;
         ros::Subscriber move_base_stat_sub;
+        ros::Subscriber preferred_path_sub;
 
         ros::Publisher global_path_pub;
         ros::Publisher all_paths_pub;
@@ -306,6 +308,11 @@ namespace shared_voronoi_global_planner
          * Callback for timer event to periodically update the voronoi diagram, if update_voronoi_rate is > 0
          **/
         void updateVoronoiCB(const ros::WallTimerEvent &e);
+
+        /**
+         * Sets the preferred path when this topic receives a message
+         **/
+        void preferredPathCB(const std_msgs::UInt32::ConstPtr &msg);
 
         /**
          * Get the closes matching path to the users' current joystick direction

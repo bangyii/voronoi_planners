@@ -1696,7 +1696,8 @@ namespace voronoi_path
         {
             //Delete the previous node from curr_node's adjacency list
             auto it = std::find(adj_list[curr_node].begin(), adj_list[curr_node].end(), prev_node);
-            adj_list[curr_node].erase(it);
+            if(it != adj_list[curr_node].end())
+                adj_list[curr_node].erase(it);
             return true;
         }
 

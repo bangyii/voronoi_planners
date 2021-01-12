@@ -243,6 +243,9 @@ namespace shared_voronoi_global_planner
             //Subscribe to odometry to make sure that sorted node list is updated
             odom_sub = nh.subscribe(odom_topic, 1, &SharedVoronoiGlobalPlanner::odomCB, this);
 
+            //Subscribe to preferred path from belief update
+            preferred_path_sub = nh.subscribe("preferred_path_ind", 1, &SharedVoronoiGlobalPlanner::preferredPathCB, this);
+
             //Visualization topics
             all_paths_pub = nh.advertise<visualization_msgs::MarkerArray>("all_paths_viz", 1);
             user_direction_pub = nh.advertise<visualization_msgs::Marker>("user_direction_viz", 1);
@@ -688,5 +691,10 @@ namespace shared_voronoi_global_planner
                 sorted_nodes_pub.publish(sorted_nodes);
             }
         }
+    }
+    
+    void SharedVoronoiGlobalPlanner::preferredPathCB(const std_msgs::UInt32::ConstPtr &msg)
+    {
+        preferred_path = msg->data;
     }
 } // namespace shared_voronoi_global_planner
