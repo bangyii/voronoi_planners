@@ -223,6 +223,11 @@ namespace shared_voronoi_global_planner
         double path_waypoint_sep = 0.2;
 
         /**
+         * Minimum joystick magnitude before registering it as a path selection input
+         **/
+        double joy_input_thresh = 0.8;
+
+        /**
          * Interval variable to store the preffered path from previous time step. Defaults to 0 which is the shortest path
          **/
         int preferred_path = 0;

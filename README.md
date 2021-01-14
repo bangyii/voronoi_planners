@@ -103,3 +103,5 @@ Among the list of paths to be considered, the path that is physically shorter wi
 `lonely_branch_dist_threshold:` Meters squared threshold to traverse a lone branch before halting. If the threshold is not reached before reaching a branching node, then the entire lone branch will be deleted. Set to 0 to disable lone branch pruning.
 
 `path_waypoint_sep:` Minimum distance between waypoints of global path, if 2 waypoints are closer than this separation, they will be deleted. This parameter does not guarantee that waypoints on paths generated are uniformly separated based on this value. Increasing this separation reduces replanning time. Units(m)
+
+`joy_sel_thresh:` Input joystick's threshold magnitude percentage (with respect to joystick specified max linear and angular velocities) before the input is considered a path selection input, and not just a control input

@@ -214,6 +214,7 @@ namespace shared_voronoi_global_planner
             nh.getParam("sorted_nodes_dist_thresh", sorted_nodes_dist_thresh);
             nh.getParam("lonely_branch_dist_threshold", lonely_branch_dist_threshold);
             nh.getParam("path_waypoint_sep", path_waypoint_sep);
+            nh.getParam("joy_input_thresh", joy_input_thresh);
 
             //Set parameters for voronoi path object
             voronoi_path.h_class_threshold = h_class_threshold;
@@ -423,8 +424,8 @@ namespace shared_voronoi_global_planner
             //Select the path most similar to user commanded velocity path
             double dist = pow(start_.pose.position.x - goal_.pose.position.x, 2) + pow(start_.pose.position.y - goal_.pose.position.y, 2);
 
-            //If joystick input magnitude is greater than 80% of joystick's maximum linear input
-            if (sqrt(pow(cmd_vel.linear.x, 2) + pow(cmd_vel.angular.z, 2)) > 0.8 * joy_max_lin && dist > pow(near_goal_threshold, 2))
+            //If joystick input magnitude fits inside an ellipse of at least 80% size of full joystick range's ellipse
+            if (pow(cmd_vel.linear.x / joy_max_lin, 2) + pow(cmd_vel.angular.z / joy_max_ang, 2) > pow(joy_input_thresh, 2) && dist > pow(near_goal_threshold, 2))
                 preferred_path = getMatchedPath(start_, all_paths_meters);
 
             //Set selected plan
