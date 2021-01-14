@@ -320,8 +320,6 @@ namespace shared_voronoi_global_planner
         else if (voronoi_path.hasPreviousPaths() && prev_goal == end_point)
         {
             all_paths = voronoi_path.replan(start_point, end_point, num_paths, preferred_path);
-            // if (!voronoi_path.bezierInterp(all_paths))
-            //     ROS_DEBUG("Bezier interpolation failed, original path already collides with obstacle");
         }
 
         //move_base was not running, there are no previous paths. So planning should be done from scratch
@@ -331,13 +329,12 @@ namespace shared_voronoi_global_planner
             voronoi_path.clearPreviousPaths();
             preferred_path = 0;
             all_paths = voronoi_path.getPath(start_point, end_point, num_paths);
-
-            //TODO: What is the purpose of this?
-            //Smooth the path received from voronoi planner, return true when fail so the global planner can try replanning/update position
-            // if (!voronoi_path.bezierInterp(all_paths))
-            //     ROS_DEBUG("Bezier interpolation failed, original path already collides with obstacle");
         }
 
+        //Interpolate path to get even separation between waypoints
+        voronoi_path.interpolatePaths(all_paths);        
+        // voronoi_path.bezierInterp(all_paths);
+        
         if (all_paths.size() < num_paths)
             ROS_WARN("Could not find all requested paths. Requested: %d, found: %ld", num_paths, all_paths.size());
 
@@ -354,7 +351,7 @@ namespace shared_voronoi_global_planner
             header.frame_id = map.frame_id;
             for (int i = 0; i < all_paths.size(); ++i)
             {
-                visualization_msgs::Marker marker;
+                visualization_msgs::Marker marker, points_marker;
                 if (publish_all_path_markers)
                 {
                     //Create marker item to store a line
@@ -370,6 +367,18 @@ namespace shared_voronoi_global_planner
                     marker.color.a = 1.0;
                     marker.pose.orientation.w = 1.0;
                     marker.lifetime = ros::Duration(1.0);
+
+                    // points_marker.header = header;
+                    // points_marker.ns = std::string("Path Points ") + std::to_string(i);
+                    // points_marker.id = i + all_paths.size();
+                    // points_marker.type = 8;
+                    // points_marker.action = 0;
+                    // points_marker.scale.x = 0.15;
+                    // points_marker.scale.y = 0.15;
+                    // points_marker.color.g = 1.0;
+                    // points_marker.color.a = 0.3;
+                    // points_marker.pose.orientation.w = 1.0;
+                    // points_marker.lifetime = ros::Duration(1.0);
                 }
 
                 //Loop through all the nodes for path i
@@ -387,11 +396,17 @@ namespace shared_voronoi_global_planner
                     all_paths_meters[i].push_back(new_pose);
 
                     if (publish_all_path_markers)
+                    {
                         marker.points.push_back(new_pose.pose.position);
+                        // points_marker.points.push_back(new_pose.pose.position);
+                    }
                 }
 
                 if (publish_all_path_markers)
+                {
+                    // marker_array.markers.push_back(points_marker);
                     marker_array.markers.push_back(marker);
+                }
 
                 //Adjust orientation of start and end positions
                 if (!all_paths_meters[i].empty())
@@ -407,6 +422,8 @@ namespace shared_voronoi_global_planner
 
             //Select the path most similar to user commanded velocity path
             double dist = pow(start_.pose.position.x - goal_.pose.position.x, 2) + pow(start_.pose.position.y - goal_.pose.position.y, 2);
+
+            //If joystick input magnitude is greater than 80% of joystick's maximum linear input
             if (sqrt(pow(cmd_vel.linear.x, 2) + pow(cmd_vel.angular.z, 2)) > 0.8 * joy_max_lin && dist > pow(near_goal_threshold, 2))
                 preferred_path = getMatchedPath(start_, all_paths_meters);
 
@@ -423,7 +440,7 @@ namespace shared_voronoi_global_planner
 
             //Publish all generated paths
             shared_voronoi_global_planner::PathList path_list;
-            for(int i = 0; i < all_paths_meters.size(); ++i)
+            for (int i = 0; i < all_paths_meters.size(); ++i)
             {
                 nav_msgs::Path temp_path;
                 temp_path.header.stamp = ros::Time::now();
@@ -646,10 +663,10 @@ namespace shared_voronoi_global_planner
         try
         {
             //Voronoi diagram not initialized yet, skip
-            if(map.frame_id.empty())
+            if (map.frame_id.empty())
             {
                 ROS_INFO("Internal map and voronoi diagram not initialized yet, skip publishing of sorted nodes");
-                return; 
+                return;
             }
 
             odom2maptf = tf_buffer.lookupTransform(map.frame_id, msg_.header.frame_id, ros::Time(0), ros::Duration(1.0));
@@ -664,7 +681,7 @@ namespace shared_voronoi_global_planner
         temp_odom = msg_.pose.pose;
         tf2::doTransform<geometry_msgs::Pose>(temp_odom, temp_odom, odom2maptf);
         msg_.pose.pose = temp_odom;
-        
+
         //last_sorted_position pose will be 0 if it was not initialized before
         double dist = pow(msg_.pose.pose.position.x - last_sorted_position.pose.pose.position.x, 2) +
                       pow(msg_.pose.pose.position.y - last_sorted_position.pose.pose.position.y, 2);
@@ -692,7 +709,7 @@ namespace shared_voronoi_global_planner
             }
         }
     }
-    
+
     void SharedVoronoiGlobalPlanner::preferredPathCB(const std_msgs::UInt32::ConstPtr &msg)
     {
         preferred_path = msg->data;

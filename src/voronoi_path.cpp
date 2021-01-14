@@ -450,7 +450,7 @@ namespace voronoi_path
     bool voronoi_path::contractPath(std::vector<GraphNode> &path)
     {
         //Calculate minimum distance between two poses in path should have, distance in pix squared
-        double waypoint_sep_sq = path_waypoint_sep / map_ptr->resolution / map_ptr->resolution;
+        double waypoint_sep_sq = path_waypoint_sep * path_waypoint_sep / map_ptr->resolution / map_ptr->resolution;
 
         //Anchor node that is being used to check for collision
         int anchor_node = 0;
@@ -519,7 +519,7 @@ namespace voronoi_path
                 }
 
                 //If point is not on segment between anchor point and connected point, delete the point
-                double dist = pow(path[j].x - path[j-1].x, 2) + pow(path[j].y - path[j-1].y, 2);
+                double dist = pow(path[j].x - path[j - 1].x, 2) + pow(path[j].y - path[j - 1].y, 2);
                 if ((path[j].x - path[connected_node].x) * (path[j].x - path[anchor_node].x) >= 0.0 || dist < waypoint_sep_sq)
                 {
                     //Decrement post deletion because the for loop will increment this again later
@@ -679,9 +679,9 @@ namespace voronoi_path
 
             auto contract_start = std::chrono::system_clock::now();
             contractPath(replanned_paths[i].path);
-            cum_time += (std::chrono::system_clock::now() - contract_start).count()/1000000000.0;
+            cum_time += (std::chrono::system_clock::now() - contract_start).count() / 1000000000.0;
         }
-        if(print_timings)
+        if (print_timings)
         {
             std::cout << "Contract and join path time: " << (std::chrono::system_clock::now() - contract_start_time).count() / 1000000000.0 << "\n";
             std::cout << "Contract cum path time: " << cum_time << "\n";
@@ -700,7 +700,7 @@ namespace voronoi_path
             previous_classes.push_back(calcHomotopyClass(path_it->path));
             ++path_it;
         }
-        if(print_timings)
+        if (print_timings)
             std::cout << "Replan homotopy calc: " << (std::chrono::system_clock::now() - homotopy_calc_start).count() / 1000000000.0 << "\n";
 
         auto check_unique_start = std::chrono::system_clock::now();
@@ -719,7 +719,7 @@ namespace voronoi_path
                     replanned_paths.push_back(path);
             }
         }
-        if(print_timings)
+        if (print_timings)
             std::cout << "Check homotopy: " << (std::chrono::system_clock::now() - check_unique_start).count() / 1000000000.0 << "\n";
 
         //Get cost of all the paths
@@ -733,10 +733,11 @@ namespace voronoi_path
 
             all_paths_cost[j] = total_cost;
         }
-        if(print_timings)
+        if (print_timings)
             std::cout << "Get all costs replan: " << (std::chrono::system_clock::now() - get_all_costs_start).count() / 1000000000.0 << "\n";
 
         //Assign -ve infinity cost to currently (selected) preferred path, prevent from deletion
+        double pref_path_cost = all_paths_cost[pref_path];
         all_paths_cost[pref_path] = -std::numeric_limits<double>::infinity();
 
         //If number of paths greater than num_paths, delete longest paths until equal
@@ -746,10 +747,10 @@ namespace voronoi_path
         {
             auto max_it = std::max_element(all_paths_cost.begin(), all_paths_cost.end());
             int ind = std::distance(all_paths_cost.begin(), max_it);
-            
+
             //If max element is greater than or equal to num_paths limit, means it is a potential path, just delete
             //Order of paths < num_paths must be maintained
-            if(ind >= num_paths)
+            if (ind >= num_paths)
             {
                 all_paths_cost.erase(max_it);
                 replanned_paths.erase(replanned_paths.begin() + ind);
@@ -765,6 +766,9 @@ namespace voronoi_path
                 all_paths_cost.pop_back();
             }
         }
+
+        //Replace pref path cost
+        all_paths_cost[pref_path] = pref_path_cost;
 
         //Update previous paths and their costs for the next round of replanning
         previous_paths = replanned_paths;
@@ -792,9 +796,9 @@ namespace voronoi_path
         //Traverse all nodes to find the one with minimum distance from start and end points
         for (int i = 0; i < num_nodes; ++i)
         {
-            if(adj_list[i].empty())
+            if (adj_list[i].empty())
                 continue;
-                
+
             curr.x = node_inf[i].x;
             curr.y = node_inf[i].y;
 
@@ -1667,6 +1671,44 @@ namespace voronoi_path
         return !had_failure;
     }
 
+    bool voronoi_path::interpolatePaths(std::vector<Path> &paths)
+    {
+        //Calculate minimum distance between two poses in path should have, distance in pix squared
+        double waypoint_sep_sq = path_waypoint_sep * path_waypoint_sep / (map_ptr->resolution * map_ptr->resolution);
+        for (auto &path : paths)
+        {
+            for (int i = 1; i < path.path.size(); ++i)
+            {
+                double sq_dist = pow(path.path[i].x - path.path[i - 1].x, 2) + pow(path.path[i].y - path.path[i - 1].y, 2);
+
+                //Current point and previous point are too far apart, interpolate to get points in between
+                if (sq_dist > waypoint_sep_sq)
+                {
+                    //sqrt steps because sq_dist and waypoint_sep_sq are squared. 1/0.2 != 1/0.04
+                    int steps = sqrt(sq_dist / waypoint_sep_sq);
+                    GraphNode prev_point = path.path[i - 1];
+                    GraphNode curr_point = path.path[i];
+                    GraphNode interp_point;
+                    int insert_position = i;
+
+                    for (int j = 1; j < steps; ++j)
+                    {
+                        interp_point.x = prev_point.x * (steps - j) / (double)steps + curr_point.x * (j) / (double)steps;
+                        interp_point.y = prev_point.y * (steps - j) / (double)steps + curr_point.y * (j) / (double)steps;
+
+                        //.insert will make the nth element your new item
+                        path.path.insert(path.path.begin() + (insert_position++), interp_point);
+
+                        //Incrememnt i because a node has been inserted before i
+                        ++i;
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
     bool voronoi_path::clearPreviousPaths()
     {
         previous_paths.clear();
@@ -1696,7 +1738,7 @@ namespace voronoi_path
         {
             //Delete the previous node from curr_node's adjacency list
             auto it = std::find(adj_list[curr_node].begin(), adj_list[curr_node].end(), prev_node);
-            if(it != adj_list[curr_node].end())
+            if (it != adj_list[curr_node].end())
                 adj_list[curr_node].erase(it);
             return true;
         }

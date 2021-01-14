@@ -254,6 +254,8 @@ namespace voronoi_path
          **/
         bool bezierInterp(std::vector<Path>& paths);
 
+        bool interpolatePaths(std::vector<Path> &paths);
+
         /**
          * Clear the vector storing all previous paths
          * @return boolean indicating success
