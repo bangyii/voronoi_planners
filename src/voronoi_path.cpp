@@ -615,6 +615,12 @@ namespace voronoi_path
                 }
             }
 
+            //Swap minimum cost path with first in list, sometimes after contraction the first index path is no longer the shortest
+            auto min_it = std::min_element(previous_path_costs.begin(), previous_path_costs.end());
+            int ind = std::distance(previous_path_costs.begin(), min_it);
+            std::swap(previous_path_costs[0], previous_path_costs[ind]);
+            std::swap(all_path_nodes[0], all_path_nodes[ind]);
+            
             path = std::move(all_path_nodes);
 
             if (print_timings)
