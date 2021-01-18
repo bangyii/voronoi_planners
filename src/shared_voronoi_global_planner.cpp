@@ -334,7 +334,6 @@ namespace shared_voronoi_global_planner
 
         //Interpolate path to get even separation between waypoints
         voronoi_path.interpolatePaths(all_paths);        
-        // voronoi_path.bezierInterp(all_paths);
         
         if (all_paths.size() < num_paths)
             ROS_WARN("Could not find all requested paths. Requested: %d, found: %ld", num_paths, all_paths.size());
@@ -405,8 +404,8 @@ namespace shared_voronoi_global_planner
 
                 if (publish_all_path_markers)
                 {
-                    // marker_array.markers.push_back(points_marker);
                     marker_array.markers.push_back(marker);
+                    // marker_array.markers.push_back(points_marker);
                 }
 
                 //Adjust orientation of start and end positions

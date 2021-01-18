@@ -446,6 +446,14 @@ namespace voronoi_path
         return hashed_int;
     }
 
+    bool voronoi_path::contractPath(std::vector<Path> &paths)
+    {
+        for (auto &path : paths)
+            contractPath(path.path);
+
+        return true;
+    }
+
     //Iterative trimming of path
     bool voronoi_path::contractPath(std::vector<GraphNode> &path)
     {
@@ -594,10 +602,11 @@ namespace voronoi_path
                     all_path_nodes[i].path.emplace_back(node_inf[node].x, node_inf[node].y);
 
                 all_path_nodes[i].path.push_back(end);
-
-                //Trim beginning of path to remove unnecessary u-turns in path
-                contractPath(all_path_nodes[i].path);
             }
+
+            //Trim beginning of path to remove unnecessary u-turns in path
+            // interpolatePaths(all_path_nodes);
+            contractPath(all_path_nodes);
 
             //Only set previous paths and their costs if this was the first call
             if (!hasPreviousPaths())
@@ -613,14 +622,14 @@ namespace voronoi_path
 
                     previous_path_costs[j] = total_cost;
                 }
+
+                //Swap minimum cost path with first in list, sometimes after contraction the first index path is no longer the shortest
+                auto min_it = std::min_element(previous_path_costs.begin(), previous_path_costs.end());
+                int ind = std::distance(previous_path_costs.begin(), min_it);
+                std::swap(previous_path_costs[0], previous_path_costs[ind]);
+                std::swap(all_path_nodes[0], all_path_nodes[ind]);
             }
 
-            //Swap minimum cost path with first in list, sometimes after contraction the first index path is no longer the shortest
-            auto min_it = std::min_element(previous_path_costs.begin(), previous_path_costs.end());
-            int ind = std::distance(previous_path_costs.begin(), min_it);
-            std::swap(previous_path_costs[0], previous_path_costs[ind]);
-            std::swap(all_path_nodes[0], all_path_nodes[ind]);
-            
             path = std::move(all_path_nodes);
 
             if (print_timings)
@@ -860,7 +869,7 @@ namespace voronoi_path
         path.reserve(path_.size());
 
         //Convert path to complex path
-        for (auto node : path_)
+        for (const auto &node : path_)
             path.emplace_back(node.x, node.y);
 
         //Go through each edge of the path
