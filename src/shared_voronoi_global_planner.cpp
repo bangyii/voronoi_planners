@@ -713,5 +713,6 @@ namespace shared_voronoi_global_planner
     void SharedVoronoiGlobalPlanner::preferredPathCB(const std_msgs::UInt32::ConstPtr &msg)
     {
         preferred_path = msg->data;
+        ROS_INFO("Shared Voronoi preferred path changed to %d", preferred_path);
     }
 } // namespace shared_voronoi_global_planner
