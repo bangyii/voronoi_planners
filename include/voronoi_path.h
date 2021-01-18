@@ -579,7 +579,13 @@ namespace voronoi_path
          * @return bool indicating success
          **/
         bool contractPath(std::vector<GraphNode> &path);
-        bool contractPath(std::vector<Path> &paths);
+
+        /** 
+         * Interpolate paths before contraction to allow smoother result, uses the method above to achieve contraction
+         * @param paths paths to contract
+         * @return bool indicating success
+         **/
+        bool interpolateContractPaths(std::vector<Path> &paths);
 
         /**
          * Checks if the two complex homotopy classes are outside the threshold, ie unique/different

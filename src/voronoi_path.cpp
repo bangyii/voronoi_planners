@@ -446,8 +446,10 @@ namespace voronoi_path
         return hashed_int;
     }
 
-    bool voronoi_path::contractPath(std::vector<Path> &paths)
+    bool voronoi_path::interpolateContractPaths(std::vector<Path> &paths)
     {
+        //Increase resolution of paths before contracting to give smoother result
+        interpolatePaths(paths);
         for (auto &path : paths)
             contractPath(path.path);
 
@@ -605,8 +607,7 @@ namespace voronoi_path
             }
 
             //Trim beginning of path to remove unnecessary u-turns in path
-            // interpolatePaths(all_path_nodes);
-            contractPath(all_path_nodes);
+            interpolateContractPaths(all_path_nodes);
 
             //Only set previous paths and their costs if this was the first call
             if (!hasPreviousPaths())
@@ -691,11 +692,12 @@ namespace voronoi_path
 
             //No insert and trim if a nearby empty cell is not found
             replanned_paths[i].path.insert(replanned_paths[i].path.begin(), start);
-
-            auto contract_start = std::chrono::system_clock::now();
-            contractPath(replanned_paths[i].path);
-            cum_time += (std::chrono::system_clock::now() - contract_start).count() / 1000000000.0;
         }
+
+        auto contract_start = std::chrono::system_clock::now();
+        interpolateContractPaths(replanned_paths);
+        cum_time += (std::chrono::system_clock::now() - contract_start).count() / 1000000000.0;
+
         if (print_timings)
         {
             std::cout << "Contract and join path time: " << (std::chrono::system_clock::now() - contract_start_time).count() / 1000000000.0 << "\n";

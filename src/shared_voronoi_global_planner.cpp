@@ -376,7 +376,7 @@ namespace shared_voronoi_global_planner
                     // points_marker.scale.x = 0.15;
                     // points_marker.scale.y = 0.15;
                     // points_marker.color.g = 1.0;
-                    // points_marker.color.a = 0.3;
+                    // points_marker.color.a = 0.8;
                     // points_marker.pose.orientation.w = 1.0;
                     // points_marker.lifetime = ros::Duration(1.0);
                 }
@@ -428,7 +428,7 @@ namespace shared_voronoi_global_planner
             {
                 int old_preferred_path = preferred_path;
                 preferred_path = getMatchedPath(start_, all_paths_meters);
-                if(old_preffered_path != preferred_path)
+                if(old_preferred_path != preferred_path)
                     ROS_INFO("Shared Voronoi preferred path changed to %d through joystick", preferred_path);
             }
 
