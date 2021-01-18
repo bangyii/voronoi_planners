@@ -425,7 +425,12 @@ namespace shared_voronoi_global_planner
 
             //If joystick input magnitude fits inside an ellipse of at least 80% size of full joystick range's ellipse
             if (pow(cmd_vel.linear.x / joy_max_lin, 2) + pow(cmd_vel.angular.z / joy_max_ang, 2) > pow(joy_input_thresh, 2) && dist > pow(near_goal_threshold, 2))
+            {
+                int old_preferred_path = preferred_path;
                 preferred_path = getMatchedPath(start_, all_paths_meters);
+                if(old_preffered_path != preferred_path)
+                    ROS_INFO("Shared Voronoi preferred path changed to %d through joystick", preferred_path);
+            }
 
             //Set selected plan
             if (all_paths_meters.size() > preferred_path)
@@ -713,6 +718,6 @@ namespace shared_voronoi_global_planner
     void SharedVoronoiGlobalPlanner::preferredPathCB(const std_msgs::UInt32::ConstPtr &msg)
     {
         preferred_path = msg->data;
-        ROS_INFO("Shared Voronoi preferred path changed to %d", preferred_path);
+        ROS_INFO("Shared Voronoi preferred path changed to %d through topic", preferred_path);
     }
 } // namespace shared_voronoi_global_planner
