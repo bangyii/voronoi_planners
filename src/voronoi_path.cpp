@@ -104,13 +104,25 @@ namespace voronoi_path
 
             std::complex<double> from_begin(1, 1);
             std::complex<double> from_end(1, 1);
-            for (int i = 0; i < centers.size(); ++i)
+
+            //Scale down centers used for calculating homotopy coefficients to prevent overflow of double
+            double max = map_ptr->width > map_ptr->height ? map_ptr->width : map_ptr->height;
+            auto scaled_centers(centers);
+            for (auto &centers : scaled_centers)
+                centers /= max;
+
+            for (int i = 0; i < scaled_centers.size(); ++i)
             {
                 obs_coeff[i] *= from_begin;
-                from_begin *= centers[i];
+                from_begin *= scaled_centers[i];
 
-                obs_coeff[centers.size() - i - 1] *= from_end;
-                from_end *= centers[centers.size() - i - 1];
+                obs_coeff[scaled_centers.size() - i - 1] *= from_end;
+                from_end *= scaled_centers[scaled_centers.size() - i - 1];
+                if (isnan(obs_coeff[i].real()) || isnan(obs_coeff[i].imag()))
+                {
+                    std::cout << "Obstacle coefficients calculation produced NaN value, unique homotopy class exploration";
+                    std::cout << "will not work properly\n ";
+                }
             }
 
             if (print_timings)
