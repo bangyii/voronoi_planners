@@ -13,9 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   roscpp
   geometry_msgs
-  angles
   nav_core
-  base_local_planner
   costmap_2d
   tf2
   visualization_msgs

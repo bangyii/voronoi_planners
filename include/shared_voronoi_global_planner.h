@@ -2,20 +2,17 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/Odometry.h>
 #include <map_msgs/OccupancyGridUpdate.h>
-#include "voronoi_path.h"
-
 #include <costmap_2d/costmap_2d_ros.h>
 #include <costmap_2d/costmap_2d.h>
 #include <nav_core/base_global_planner.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Twist.h>
-#include <angles/angles.h>
-#include <base_local_planner/world_model.h>
-#include <base_local_planner/costmap_model.h>
+#include <tf2_ros/transform_listener.h>
 #include <std_msgs/UInt32.h>
+
+#include "voronoi_path.h"
+
 #include <chrono>
-#include <memory>
-#include <mutex>
 
 #ifndef SHARED_VORONOI_GLOBAL_PLANNER_H
 #define SHARED_VORONOI_GLOBAL_PLANNER_H
@@ -182,9 +179,14 @@ namespace shared_voronoi_global_planner
         bool add_local_costmap_corners = false;
 
         /**
-         * Parameter to indicate wheteher to publish markers for all generated paths
+         * Parameter to indicate whether to publish markers for all generated paths
          **/
         bool publish_all_path_markers = false;
+
+        /**
+         * Parameter to indicate whether to publish point markers for all generated paths
+         **/
+        bool publish_path_point_markers = false;
 
         /**
          * Joystick topic to subscribe to for user's indicated direction
@@ -271,8 +273,13 @@ namespace shared_voronoi_global_planner
         ros::Publisher adjacency_list_pub;
         ros::Publisher sorted_nodes_pub;
         ros::Publisher node_info_pub;
-        ros::Publisher costmap_pub;
         ros::Publisher all_paths_ind_pub;
+
+        /**
+         * TF buffer and listener in global scope to reduce waiting time before a recent tf is received
+         **/
+        tf2_ros::Buffer tf_buffer;
+        tf2_ros::TransformListener tf_listener;
 
         /**
          * Timer for updating the voronoi diagram, if specified in rosparams
@@ -283,6 +290,8 @@ namespace shared_voronoi_global_planner
          * To store user's indicated direction
          **/
         geometry_msgs::Twist cmd_vel;
+
+        /**************** PRIVATE METHODS *****************/
 
         /**
          * Callback for local costmap, if subscribed
@@ -334,6 +343,26 @@ namespace shared_voronoi_global_planner
          * @return minimum angle between the 2 vectors in rads
          **/
         double vectorAngle(const double vec1[2], const double vec2[2]);
+
+        /**
+         * Method to check if input cmd_velocity exceeds magnitude threshold, given maximum cmd_vel
+         * @param cmd_vel Twist variable containing current joystick's input
+         * @param max_lin_command maximum commandable linear velocity that can be published by the input joystick
+         * @param max_ang_command same as max_lin_command but for angular velocity
+         * @param magnitude_threshold % threshold where this function returns true
+         * @return boolean indicating whether the command's magnitude exceeds threshold
+         **/
+        bool joystickExceedsThreshold(const geometry_msgs::Twist & cmd_vel, const double max_lin_command, const double max_ang_command, const double magnitude_threshold);
+
+        /**
+         * Publish visualization markers for generated voronoi graph
+         **/
+        void publishVoronoiViz();
+
+        /**
+         * Read ROS parameters
+         **/
+        void readParams();
     };
 }; // namespace shared_voronoi_global_planner
 

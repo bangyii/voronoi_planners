@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <limits>
 #include <geometry_msgs/Point.h>
-#include <tf2_ros/transform_listener.h>
 
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -23,12 +22,12 @@ PLUGINLIB_EXPORT_CLASS(shared_voronoi_global_planner::SharedVoronoiGlobalPlanner
 namespace shared_voronoi_global_planner
 {
     SharedVoronoiGlobalPlanner::SharedVoronoiGlobalPlanner()
-        : nh("~" + std::string("SharedVoronoiGlobalPlanner"))
+        : nh("~" + std::string("SharedVoronoiGlobalPlanner")), tf_listener(tf_buffer)
     {
     }
 
     SharedVoronoiGlobalPlanner::SharedVoronoiGlobalPlanner(std::string name, costmap_2d::Costmap2DROS *costmap_ros)
-        : nh("~" + std::string("SharedVoronoiGlobalPlanner"))
+        : nh("~" + std::string("SharedVoronoiGlobalPlanner")), tf_listener(tf_buffer)
     {
     }
 
@@ -58,18 +57,6 @@ namespace shared_voronoi_global_planner
         voronoi_path.mapToGraph(&map);
         ROS_WARN("Voronoi diagram initialized");
 
-        // nav_msgs::OccupancyGrid temp_map;
-        // temp_map.data = map.data;
-        // temp_map.info.resolution = map.resolution;
-        // temp_map.info.width = map.width;
-        // temp_map.info.height = map.height;
-        // temp_map.header.frame_id = "map";
-        // temp_map.header.stamp = ros::Time::now();
-        // temp_map.info.origin.position.x = -100;
-        // temp_map.info.origin.position.y = -100;
-        // temp_map.info.origin.orientation.w = 1.0;
-        // costmap_pub.publish(temp_map);
-
         //Publish adjacency list and corresponding info to
         std::vector<std::vector<int>> adj_list_raw = voronoi_path.getAdjList();
         std::vector<voronoi_path::GraphNode> node_inf_raw = voronoi_path.getNodeInfo();
@@ -89,145 +76,14 @@ namespace shared_voronoi_global_planner
 
         //Publish visualization marker for use in rviz
         if (visualize_edges)
-        {
-            std::vector<voronoi_path::GraphNode> nodes;
-            std::vector<voronoi_path::GraphNode> lonely_nodes;
-            std::vector<voronoi_path::GraphNode> centers;
-            voronoi_path.getObstacleCentroids(centers);
-            voronoi_path.getEdges(nodes);
-            voronoi_path.getDisconnectedNodes(lonely_nodes);
-
-            //Markers for voronoi edges
-            visualization_msgs::MarkerArray marker_array;
-            visualization_msgs::Marker marker;
-            marker.header.stamp = ros::Time::now();
-            marker.header.frame_id = map.frame_id;
-            marker.id = 0;
-            marker.ns = "Voronoi Edges";
-            marker.type = 5;
-            marker.action = 0;
-            marker.scale.x = 0.01;
-            marker.color.a = 1.0;
-            marker.color.b = 1.0;
-            marker.pose.orientation.w = 1.0;
-            marker.points.reserve(nodes.size());
-
-            for (const auto &node : nodes)
-            {
-                geometry_msgs::Point temp_point;
-                temp_point.x = node.x * static_cast<double>(map.resolution) + map.origin.position.x;
-                temp_point.y = node.y * static_cast<double>(map.resolution) + map.origin.position.y;
-
-                if (node.x > 0 && node.x < 0.01 && node.y > 0 && node.y < 0.01)
-                    break;
-
-                marker.points.push_back(std::move(temp_point));
-            }
-
-            //Markers for voronoi nodes that are only connected on one side
-            visualization_msgs::Marker marker_lonely;
-            marker_lonely.header.stamp = ros::Time::now();
-            marker_lonely.header.frame_id = map.frame_id;
-            marker_lonely.id = 1;
-            marker_lonely.ns = "Lonely Nodes";
-            marker_lonely.type = 8;
-            marker_lonely.action = 0;
-            marker_lonely.scale.x = 0.1;
-            marker_lonely.scale.y = 0.1;
-            marker_lonely.color.a = 1.0;
-            marker_lonely.color.r = 1.0;
-            marker_lonely.pose.orientation.w = 1.0;
-            marker_lonely.points.reserve(lonely_nodes.size());
-
-            for (const auto &node : lonely_nodes)
-            {
-                geometry_msgs::Point temp_point;
-                temp_point.x = node.x * static_cast<double>(map.resolution) + map.origin.position.x;
-                temp_point.y = node.y * static_cast<double>(map.resolution) + map.origin.position.y;
-
-                marker_lonely.points.push_back(std::move(temp_point));
-            }
-
-            //Markers for centroids of obstacles
-            visualization_msgs::Marker marker_obstacles;
-            marker_obstacles.header.stamp = ros::Time::now();
-            marker_obstacles.header.frame_id = map.frame_id;
-            marker_obstacles.id = 2;
-            marker_obstacles.ns = "Obstacle Centroids";
-            marker_obstacles.type = 8;
-            marker_obstacles.action = 0;
-            marker_obstacles.scale.x = 0.2;
-            marker_obstacles.scale.y = 0.2;
-            marker_obstacles.color.a = 1.0;
-            marker_obstacles.color.g = 1.0;
-            marker_obstacles.pose.orientation.w = 1.0;
-            marker_obstacles.points.reserve(centers.size());
-
-            for (const auto &center : centers)
-            {
-                geometry_msgs::Point temp_point;
-                temp_point.x = center.x * static_cast<double>(map.resolution) + map.origin.position.x;
-                temp_point.y = center.y * static_cast<double>(map.resolution) + map.origin.position.y;
-
-                marker_obstacles.points.push_back(std::move(temp_point));
-            }
-
-            marker_array.markers.push_back(std::move(marker_obstacles));
-            marker_array.markers.push_back(std::move(marker));
-            marker_array.markers.push_back(std::move(marker_lonely));
-            edges_viz_pub.publish(marker_array);
-        }
+            publishVoronoiViz();
     }
 
     void SharedVoronoiGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS *costmap_ros)
     {
         if (!initialized_)
         {
-            //Read parameters
-            nh.getParam("occupancy_threshold", occupancy_threshold);
-            nh.getParam("update_voronoi_rate", update_voronoi_rate);
-            nh.getParam("print_timings", print_timings);
-            nh.getParam("line_check_resolution", line_check_resolution);
-            nh.getParam("pixels_to_skip", pixels_to_skip);
-            nh.getParam("open_cv_scale", open_cv_scale);
-            nh.getParam("h_class_threshold", h_class_threshold);
-            nh.getParam("min_node_sep_sq", min_node_sep_sq);
-            nh.getParam("extra_point_distance", extra_point_distance);
-            nh.getParam("add_local_costmap_corners", add_local_costmap_corners);
-            nh.getParam("forward_sim_time", forward_sim_time);
-            nh.getParam("forward_sim_resolution", forward_sim_resolution);
-            nh.getParam("num_paths", num_paths);
-            nh.getParam("publish_all_path_markers", publish_all_path_markers);
-            nh.getParam("joystick_topic", joystick_topic);
-            nh.getParam("visualize_edges", visualize_edges);
-            nh.getParam("node_connection_threshold_pix", node_connection_threshold_pix);
-            nh.getParam("collision_threshold", collision_threshold);
-            nh.getParam("joy_max_lin", joy_max_lin);
-            nh.getParam("joy_max_ang", joy_max_ang);
-            nh.getParam("subscribe_local_costmap", subscribe_local_costmap);
-            nh.getParam("trimming_collision_threshold", trimming_collision_threshold);
-            nh.getParam("search_radius", search_radius);
-            nh.getParam("selection_threshold", selection_threshold);
-            nh.getParam("static_global_map", static_global_map);
-            nh.getParam("xy_goal_tolerance", xy_goal_tolerance);
-            nh.getParam("odom_topic", odom_topic);
-            nh.getParam("sorted_nodes_dist_thresh", sorted_nodes_dist_thresh);
-            nh.getParam("lonely_branch_dist_threshold", lonely_branch_dist_threshold);
-            nh.getParam("path_waypoint_sep", path_waypoint_sep);
-            nh.getParam("joy_input_thresh", joy_input_thresh);
-
-            //Set parameters for voronoi path object
-            voronoi_path.h_class_threshold = h_class_threshold;
-            voronoi_path.print_timings = print_timings;
-            voronoi_path.node_connection_threshold_pix = node_connection_threshold_pix;
-            voronoi_path.extra_point_distance = extra_point_distance;
-            voronoi_path.min_node_sep_sq = min_node_sep_sq;
-            voronoi_path.trimming_collision_threshold = trimming_collision_threshold;
-            voronoi_path.search_radius = search_radius;
-            voronoi_path.open_cv_scale = open_cv_scale;
-            voronoi_path.pixels_to_skip = pixels_to_skip;
-            voronoi_path.lonely_branch_dist_threshold = lonely_branch_dist_threshold;
-            voronoi_path.path_waypoint_sep = path_waypoint_sep;
+            readParams();
 
             //Subscribe and advertise related topics
             global_costmap_sub = nh.subscribe("/move_base/global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);
@@ -259,8 +115,6 @@ namespace shared_voronoi_global_planner
             sorted_nodes_pub = nh.advertise<shared_voronoi_global_planner::SortedNodesList>("sorted_nodes", 1, true);
             all_paths_ind_pub = nh.advertise<shared_voronoi_global_planner::PathList>("all_paths", 1);
 
-            // costmap_pub = nh.advertise<nav_msgs::OccupancyGrid>("grid", 1);
-
             //Create timer to update Voronoi diagram, use one shot timer if update rate is 0
             if (update_voronoi_rate != 0)
                 voronoi_update_timer = nh.createWallTimer(ros::WallDuration(1.0 / update_voronoi_rate), &SharedVoronoiGlobalPlanner::updateVoronoiCB, this);
@@ -278,14 +132,12 @@ namespace shared_voronoi_global_planner
     {
         static std::vector<voronoi_path::Path> all_paths;
         static std::vector<std::vector<geometry_msgs::PoseStamped>> all_paths_meters;
-        //Transform goal and start to map frame if they are not already in map frame
         geometry_msgs::PoseStamped start_ = start;
         geometry_msgs::PoseStamped goal_ = goal;
 
+        //Transform goal and start to map frame if they are not already in map frame
         if (goal_.header.frame_id != map.frame_id)
         {
-            tf2_ros::Buffer tf_buffer;
-            tf2_ros::TransformListener tf_listener(tf_buffer);
             ROS_WARN("Goal position is not in map frame, transforming goal to map frame before continuing");
             geometry_msgs::TransformStamped goal2MapTF;
 
@@ -333,8 +185,8 @@ namespace shared_voronoi_global_planner
         }
 
         //Interpolate path to get even separation between waypoints
-        voronoi_path.interpolatePaths(all_paths);        
-        
+        voronoi_path.interpolatePaths(all_paths);
+
         if (all_paths.size() < num_paths)
             ROS_WARN("Could not find all requested paths. Requested: %d, found: %ld", num_paths, all_paths.size());
 
@@ -368,26 +220,29 @@ namespace shared_voronoi_global_planner
                     marker.pose.orientation.w = 1.0;
                     marker.lifetime = ros::Duration(1.0);
 
-                    // points_marker.header = header;
-                    // points_marker.ns = std::string("Path Points ") + std::to_string(i);
-                    // points_marker.id = i + all_paths.size();
-                    // points_marker.type = 8;
-                    // points_marker.action = 0;
-                    // points_marker.scale.x = 0.15;
-                    // points_marker.scale.y = 0.15;
-                    // points_marker.color.g = 1.0;
-                    // points_marker.color.a = 0.8;
-                    // points_marker.pose.orientation.w = 1.0;
-                    // points_marker.lifetime = ros::Duration(1.0);
+                    if (publish_path_point_markers)
+                    {
+                        points_marker.header = header;
+                        points_marker.ns = std::string("Path Points ") + std::to_string(i);
+                        points_marker.id = i + all_paths.size();
+                        points_marker.type = 8;
+                        points_marker.action = 0;
+                        points_marker.scale.x = 0.15;
+                        points_marker.scale.y = 0.15;
+                        points_marker.color.g = 1.0;
+                        points_marker.color.a = 0.8;
+                        points_marker.pose.orientation.w = 1.0;
+                        points_marker.lifetime = ros::Duration(1.0);
+                    }
                 }
 
                 //Loop through all the nodes for path i
-                for (int j = 0; j < all_paths[i].path.size(); ++j)
+                for (const auto &pose : all_paths[i].path)
                 {
                     geometry_msgs::PoseStamped new_pose;
                     new_pose.header = header;
-                    new_pose.pose.position.x = all_paths[i].path[j].x * map.resolution + map.origin.position.x;
-                    new_pose.pose.position.y = all_paths[i].path[j].y * map.resolution + map.origin.position.y;
+                    new_pose.pose.position.x = pose.x * map.resolution + map.origin.position.x;
+                    new_pose.pose.position.y = pose.y * map.resolution + map.origin.position.y;
                     new_pose.pose.position.z = 0;
 
                     //TODO: Set orientation of intermediate poses
@@ -398,14 +253,18 @@ namespace shared_voronoi_global_planner
                     if (publish_all_path_markers)
                     {
                         marker.points.push_back(new_pose.pose.position);
-                        // points_marker.points.push_back(new_pose.pose.position);
+
+                        if (publish_path_point_markers)
+                            points_marker.points.push_back(new_pose.pose.position);
                     }
                 }
 
                 if (publish_all_path_markers)
                 {
                     marker_array.markers.push_back(marker);
-                    // marker_array.markers.push_back(points_marker);
+
+                    if (publish_path_point_markers)
+                        marker_array.markers.push_back(points_marker);
                 }
 
                 //Adjust orientation of start and end positions
@@ -420,15 +279,13 @@ namespace shared_voronoi_global_planner
             if (publish_all_path_markers)
                 all_paths_pub.publish(marker_array);
 
-            //Select the path most similar to user commanded velocity path
+            //Select the path most similar to user commanded velocity path if joystick input magnitude fits inside an ellipse of at least 80% size of full joystick range's ellipse
             double dist = pow(start_.pose.position.x - goal_.pose.position.x, 2) + pow(start_.pose.position.y - goal_.pose.position.y, 2);
-
-            //If joystick input magnitude fits inside an ellipse of at least 80% size of full joystick range's ellipse
-            if (pow(cmd_vel.linear.x / joy_max_lin, 2) + pow(cmd_vel.angular.z / joy_max_ang, 2) > pow(joy_input_thresh, 2) && dist > pow(near_goal_threshold, 2))
+            if (joystickExceedsThreshold(cmd_vel, joy_max_lin, joy_max_ang, joy_input_thresh) && dist > pow(near_goal_threshold, 2))
             {
                 int old_preferred_path = preferred_path;
                 preferred_path = getMatchedPath(start_, all_paths_meters);
-                if(old_preferred_path != preferred_path)
+                if (old_preferred_path != preferred_path)
                     ROS_INFO("Shared Voronoi preferred path changed to %d through joystick", preferred_path);
             }
 
@@ -506,8 +363,7 @@ namespace shared_voronoi_global_planner
 
         user_path.emplace_back(x, y);
 
-        double curr_time = 0.0;
-        while (curr_time <= forward_sim_time + 0.01)
+        for(double curr_time; curr_time <= forward_sim_time + 0.5 * time_interval; curr_time += time_interval)
         {
             if (curr_time > forward_sim_time)
                 curr_time = forward_sim_time;
@@ -522,8 +378,6 @@ namespace shared_voronoi_global_planner
 
             user_path.emplace_back(x, y);
             marker.points.push_back(point);
-
-            curr_time += time_interval;
         }
 
         user_direction_pub.publish(marker);
@@ -559,7 +413,7 @@ namespace shared_voronoi_global_planner
             }
         }
 
-        //If the angular difference of a path is greater than selection_threshold%, change cost to infinity
+        //If the angular difference of a path is greater than selection_threshold %, change cost to infinity
         std::vector<double> total_costs = voronoi_path.getAllPathCosts();
         double min_val = *std::min_element(ang_diff_sq.begin(), ang_diff_sq.end());
         for (int i = 0; i < ang_diff_sq.size(); ++i)
@@ -595,14 +449,16 @@ namespace shared_voronoi_global_planner
             int x_pixel_offset = rel_local_x / map.resolution;
             int y_pixel_offset = rel_local_y / map.resolution;
 
-            std::vector<voronoi_path::GraphNode> local_vertices;
-            local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset, y_pixel_offset));
-            local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset));
-            local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset + local_costmap.info.height));
-            local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset, y_pixel_offset + local_costmap.info.height));
-
             if (add_local_costmap_corners)
+            {
+                std::vector<voronoi_path::GraphNode> local_vertices;
+                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset, y_pixel_offset));
+                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset));
+                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset + local_costmap.info.height));
+                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset, y_pixel_offset + local_costmap.info.height));
+
                 voronoi_path.setLocalVertices(local_vertices);
+            }
 
             //Restore modified global costmap pixels to old value in previous loop, in cases when local obstacle is moving
             for (int i = 0; i < map_pixels_backup.size(); ++i)
@@ -660,8 +516,6 @@ namespace shared_voronoi_global_planner
     void SharedVoronoiGlobalPlanner::odomCB(const nav_msgs::Odometry::ConstPtr &msg)
     {
         //Convert odom from odom frame to map frame
-        tf2_ros::Buffer tf_buffer;
-        tf2_ros::TransformListener tf_listener(tf_buffer);
         geometry_msgs::TransformStamped odom2maptf;
         nav_msgs::Odometry msg_ = *msg;
 
@@ -682,10 +536,7 @@ namespace shared_voronoi_global_planner
             return;
         }
 
-        geometry_msgs::Pose temp_odom;
-        temp_odom = msg_.pose.pose;
-        tf2::doTransform<geometry_msgs::Pose>(temp_odom, temp_odom, odom2maptf);
-        msg_.pose.pose = temp_odom;
+        tf2::doTransform<geometry_msgs::Pose>(msg_.pose.pose, msg_.pose.pose, odom2maptf);
 
         //last_sorted_position pose will be 0 if it was not initialized before
         double dist = pow(msg_.pose.pose.position.x - last_sorted_position.pose.pose.position.x, 2) +
@@ -719,5 +570,151 @@ namespace shared_voronoi_global_planner
     {
         preferred_path = msg->data;
         ROS_INFO("Shared Voronoi preferred path changed to %d through topic", preferred_path);
+    }
+
+    bool SharedVoronoiGlobalPlanner::joystickExceedsThreshold(const geometry_msgs::Twist &cmd_vel, const double max_lin_command,
+                                                              const double max_ang_command, const double magnitude_threshold)
+    {
+        return pow(cmd_vel.linear.x / max_lin_command, 2) + pow(cmd_vel.angular.z / max_ang_command, 2) > pow(magnitude_threshold, 2);
+    }
+
+    void SharedVoronoiGlobalPlanner::publishVoronoiViz()
+    {
+        std::vector<voronoi_path::GraphNode> nodes;
+        std::vector<voronoi_path::GraphNode> lonely_nodes;
+        std::vector<voronoi_path::GraphNode> centers;
+        voronoi_path.getObstacleCentroids(centers);
+        voronoi_path.getEdges(nodes);
+        voronoi_path.getDisconnectedNodes(lonely_nodes);
+
+        //Markers for voronoi edges
+        visualization_msgs::MarkerArray marker_array;
+        visualization_msgs::Marker marker;
+        marker.header.stamp = ros::Time::now();
+        marker.header.frame_id = map.frame_id;
+        marker.id = 0;
+        marker.ns = "Voronoi Edges";
+        marker.type = 5;
+        marker.action = 0;
+        marker.scale.x = 0.01;
+        marker.color.a = 1.0;
+        marker.color.b = 1.0;
+        marker.pose.orientation.w = 1.0;
+        marker.points.reserve(nodes.size());
+
+        for (const auto &node : nodes)
+        {
+            geometry_msgs::Point temp_point;
+            temp_point.x = node.x * static_cast<double>(map.resolution) + map.origin.position.x;
+            temp_point.y = node.y * static_cast<double>(map.resolution) + map.origin.position.y;
+
+            if (node.x > 0 && node.x < 0.01 && node.y > 0 && node.y < 0.01)
+                break;
+
+            marker.points.push_back(std::move(temp_point));
+        }
+
+        //Markers for voronoi nodes that are only connected on one side
+        visualization_msgs::Marker marker_lonely;
+        marker_lonely.header.stamp = ros::Time::now();
+        marker_lonely.header.frame_id = map.frame_id;
+        marker_lonely.id = 1;
+        marker_lonely.ns = "Lonely Nodes";
+        marker_lonely.type = 8;
+        marker_lonely.action = 0;
+        marker_lonely.scale.x = 0.1;
+        marker_lonely.scale.y = 0.1;
+        marker_lonely.color.a = 1.0;
+        marker_lonely.color.r = 1.0;
+        marker_lonely.pose.orientation.w = 1.0;
+        marker_lonely.points.reserve(lonely_nodes.size());
+
+        for (const auto &node : lonely_nodes)
+        {
+            geometry_msgs::Point temp_point;
+            temp_point.x = node.x * static_cast<double>(map.resolution) + map.origin.position.x;
+            temp_point.y = node.y * static_cast<double>(map.resolution) + map.origin.position.y;
+
+            marker_lonely.points.push_back(std::move(temp_point));
+        }
+
+        //Markers for centroids of obstacles
+        visualization_msgs::Marker marker_obstacles;
+        marker_obstacles.header.stamp = ros::Time::now();
+        marker_obstacles.header.frame_id = map.frame_id;
+        marker_obstacles.id = 2;
+        marker_obstacles.ns = "Obstacle Centroids";
+        marker_obstacles.type = 8;
+        marker_obstacles.action = 0;
+        marker_obstacles.scale.x = 0.2;
+        marker_obstacles.scale.y = 0.2;
+        marker_obstacles.color.a = 1.0;
+        marker_obstacles.color.g = 1.0;
+        marker_obstacles.pose.orientation.w = 1.0;
+        marker_obstacles.points.reserve(centers.size());
+
+        for (const auto &center : centers)
+        {
+            geometry_msgs::Point temp_point;
+            temp_point.x = center.x * static_cast<double>(map.resolution) + map.origin.position.x;
+            temp_point.y = center.y * static_cast<double>(map.resolution) + map.origin.position.y;
+
+            marker_obstacles.points.push_back(std::move(temp_point));
+        }
+
+        marker_array.markers.push_back(std::move(marker_obstacles));
+        marker_array.markers.push_back(std::move(marker));
+        marker_array.markers.push_back(std::move(marker_lonely));
+        edges_viz_pub.publish(marker_array);
+    }
+
+    void SharedVoronoiGlobalPlanner::readParams()
+    {
+        //Read parameters
+        nh.getParam("occupancy_threshold", occupancy_threshold);
+        nh.getParam("update_voronoi_rate", update_voronoi_rate);
+        nh.getParam("print_timings", print_timings);
+        nh.getParam("line_check_resolution", line_check_resolution);
+        nh.getParam("pixels_to_skip", pixels_to_skip);
+        nh.getParam("open_cv_scale", open_cv_scale);
+        nh.getParam("h_class_threshold", h_class_threshold);
+        nh.getParam("min_node_sep_sq", min_node_sep_sq);
+        nh.getParam("extra_point_distance", extra_point_distance);
+        nh.getParam("add_local_costmap_corners", add_local_costmap_corners);
+        nh.getParam("forward_sim_time", forward_sim_time);
+        nh.getParam("forward_sim_resolution", forward_sim_resolution);
+        nh.getParam("num_paths", num_paths);
+        nh.getParam("publish_all_path_markers", publish_all_path_markers);
+        nh.getParam("joystick_topic", joystick_topic);
+        nh.getParam("visualize_edges", visualize_edges);
+        nh.getParam("node_connection_threshold_pix", node_connection_threshold_pix);
+        nh.getParam("collision_threshold", collision_threshold);
+        nh.getParam("joy_max_lin", joy_max_lin);
+        nh.getParam("joy_max_ang", joy_max_ang);
+        nh.getParam("subscribe_local_costmap", subscribe_local_costmap);
+        nh.getParam("trimming_collision_threshold", trimming_collision_threshold);
+        nh.getParam("search_radius", search_radius);
+        nh.getParam("selection_threshold", selection_threshold);
+        nh.getParam("static_global_map", static_global_map);
+        nh.getParam("xy_goal_tolerance", xy_goal_tolerance);
+        nh.getParam("odom_topic", odom_topic);
+        nh.getParam("sorted_nodes_dist_thresh", sorted_nodes_dist_thresh);
+        nh.getParam("lonely_branch_dist_threshold", lonely_branch_dist_threshold);
+        nh.getParam("path_waypoint_sep", path_waypoint_sep);
+        nh.getParam("joy_input_thresh", joy_input_thresh);
+        nh.getParam("publish_path_point_markers", publish_path_point_markers);
+
+        //Set parameters for voronoi path object
+        voronoi_path.h_class_threshold = h_class_threshold;
+        voronoi_path.print_timings = print_timings;
+        voronoi_path.node_connection_threshold_pix = node_connection_threshold_pix;
+        voronoi_path.extra_point_distance = extra_point_distance;
+        voronoi_path.min_node_sep_sq = min_node_sep_sq;
+        voronoi_path.trimming_collision_threshold = trimming_collision_threshold;
+        voronoi_path.search_radius = search_radius;
+        voronoi_path.open_cv_scale = open_cv_scale;
+        voronoi_path.pixels_to_skip = pixels_to_skip;
+        voronoi_path.lonely_branch_dist_threshold = lonely_branch_dist_threshold;
+        voronoi_path.path_waypoint_sep = path_waypoint_sep;
     }
 } // namespace shared_voronoi_global_planner

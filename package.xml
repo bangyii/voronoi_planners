@@ -59,11 +59,8 @@
   <depend>costmap_2d</depend>
   <depend>nav_core</depend>
   <depend>geometry_msgs</depend>
-  <depend>angles</depend>
-  <depend>base_local_planner</depend>
   <depend>tf2</depend>
   <depend>visualization_msgs</depend>
-  <depend>actionlib_msgs</depend>
   <depend>tf2_ros</depend>
 
   <!-- The export tag contains other, unspecified, tags -->
