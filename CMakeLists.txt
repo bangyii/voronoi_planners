@@ -16,6 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
   nav_core
   costmap_2d
   tf2
+  tf2_geometry_msgs
   visualization_msgs
   actionlib_msgs
   tf2_ros

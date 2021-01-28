@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <limits>
 #include <geometry_msgs/Point.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>

@@ -118,7 +118,7 @@ namespace voronoi_path
 
                 obs_coeff[scaled_centers.size() - i - 1] *= from_end;
                 from_end *= scaled_centers[scaled_centers.size() - i - 1];
-                if (isnan(obs_coeff[i].real()) || isnan(obs_coeff[i].imag()))
+                if (std::isnan(obs_coeff[i].real()) || std::isnan(obs_coeff[i].imag()))
                 {
                     std::cout << "Obstacle coefficients calculation produced NaN value, unique homotopy class exploration";
                     std::cout << "will not work properly\n ";
