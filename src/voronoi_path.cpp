@@ -37,36 +37,6 @@ namespace voronoi_path
             //Downscale to increase contour finding speed
             cv::resize(cv_map, cv_map, cv::Size(), open_cv_scale, open_cv_scale, cv::INTER_AREA);
 
-            //Copy downsized map
-            // downsized_map.data.resize(cv_map.rows * cv_map.cols);
-            // if (cv_map.isContinuous())
-            // {
-            //     downsized_map = *map_ptr;
-            //     downsized_map.origin.position.x = 0;
-            //     downsized_map.origin.position.y = 0;
-            //     downsized_map.width *= open_cv_scale;
-            //     downsized_map.height *= open_cv_scale;
-            //     downsized_map.resolution /= open_cv_scale;
-            //     downsized_map.data.clear();
-            //     downsized_map.data.assign(cv_map.data, cv_map.data + cv_map.total());
-
-            //     // //Copy over unknown pixels
-            //     // for(int i = 0; i < downsized_map.data.size(); ++i)
-            //     // {
-            //     //     int downsized_x = i % downsized_map.width;
-            //     //     int downsized_y = (int)(i / downsized_map.width);
-            //     //     int upsized_ind = (downsized_x + downsized_y * downsized_map.width) / open_cv_scale;
-            //     //     if(map_ptr->data[upsized_ind] == -1)
-            //     //     {
-            //     //         // std::cout << "Pixel: " << i << " should be -1\n";
-            //     //         downsized_map.data[i] = -1;
-            //     //     }
-
-            //     //     // else
-            //     //     //     std::cout << "Skipped pixel: " << i << "\n";
-            //     // }
-            // }
-
             //Flip and transpose because image from map_server and actual map orientation is different
             cv::flip(cv_map, cv_map, 1);
             cv::transpose(cv_map, cv_map);
@@ -154,23 +124,10 @@ namespace voronoi_path
     bool voronoi_path::mapToGraph(Map *map_ptr_)
     {
         Profiler complete_profiler;
-        auto start_time = std::chrono::system_clock::now();
-
         map_ptr = map_ptr_;
 
         //Get centroids after map has been updated
         findObstacleCentroids();
-        // if(!downsized_map.data.empty())
-        //     map_ptr = &downsized_map;
-        // {
-        //     map_ptr->data = downsized_map.data;
-        //     map_ptr->width *= open_cv_scale;
-        //     map_ptr->height *= open_cv_scale;
-        //     map_ptr->resolution /= open_cv_scale;
-        // }
-
-        // else
-        //     std::cout << "Failed to downsize map used for voronoi generation\n";
 
         //Lock mutex to ensure adj_list is not being used
         Profiler section_profiler;
@@ -187,16 +144,8 @@ namespace voronoi_path
         BL = std::complex<double>(0, 0);
         TR = std::complex<double>(map_ptr->width - 1, map_ptr->height - 1);
 
-        //Reset all variables
-        edge_vector.clear();
-        adj_list.clear();
-        node_inf.clear();
-
         // Loop through map to find occupied cells
-        std::vector<jcv_point> points_vec;
-
         int num_threads = std::thread::hardware_concurrency();
-
         std::vector<std::future<std::vector<jcv_point>>> future_vector;
         future_vector.reserve(num_threads - 1);
 
@@ -211,6 +160,7 @@ namespace voronoi_path
 
         //For last thread, take all remaining pixels
         //This current thread is the nth thread
+        std::vector<jcv_point> points_vec;
         points_vec = fillOccupancyVector((num_threads - 1) * num_pixels, size - num_pixels * (num_threads - 1));
 
         for (int i = 0; i < future_vector.size(); ++i)
@@ -238,7 +188,6 @@ namespace voronoi_path
         }
 
         int occupied_points = points_vec.size();
-
         jcv_point *points = (jcv_point *)malloc(occupied_points * sizeof(jcv_point));
 
         if (!points)
@@ -267,6 +216,7 @@ namespace voronoi_path
         jcv_diagram_generate(occupied_points, points, &rect, 0, &diagram);
 
         //Get edges from voronoi diagram
+        std::vector<const jcv_edge *> edge_vector;
         const jcv_edge *edges = jcv_diagram_get_edges(&diagram);
         while (edges)
         {
@@ -278,23 +228,44 @@ namespace voronoi_path
             section_profiler.print("mapToGraph generating edges");
 
         //Remove edge vertices that are in obtacle
-        removeObstacleVertices();
+        removeObstacleVertices(edge_vector);
 
         //Remove edges that pass through obstacle
-        removeCollisionEdges();
+        removeCollisionEdges(edge_vector);
+
         if (print_timings)
             section_profiler.print("mapToGraph clearing edges");
 
         //Convert edges to adjacency list
+        edgesToAdjacency(edge_vector);
+
+        if (print_timings)
+        {
+            section_profiler.print("mapToGraph convert edges to adjacency");
+            complete_profiler.print("mapToGraph total time");
+        }
+
+        jcv_diagram_free(&diagram);
+        free(points);
+        return true;
+    }
+
+    bool voronoi_path::edgesToAdjacency(const std::vector<const jcv_edge *> &edge_vector)
+    {
+        //Reset all variables
+        adj_list.clear();
+        node_inf.clear();
+
         std::unordered_map<uint32_t, int> hash_index_map;
         for (int i = 0; i < edge_vector.size(); ++i)
         {
             //Get hash for both vertices of the current edge
-            std::vector<uint32_t> hash_vec = {hash(edge_vector[i]->pos[0].x, edge_vector[i]->pos[0].y), hash(edge_vector[i]->pos[1].x, edge_vector[i]->pos[1].y)};
-            int node_index[2] = {-1, -1};
+            std::vector<uint32_t> hash_vec = {hash(edge_vector[i]->pos[0].x, edge_vector[i]->pos[0].y),
+                                              hash(edge_vector[i]->pos[1].x, edge_vector[i]->pos[1].y)};
+            int node_index[] = {-1, -1};
 
             //Check if each node is already in the map
-            for (int j = 0; j < hash_vec.size(); ++j)
+            for (int j = 0; j < 2; ++j)
             {
                 auto node_it = hash_index_map.find(hash_vec[j]);
 
@@ -302,9 +273,9 @@ namespace voronoi_path
                 if (node_it != hash_index_map.end())
                     node_index[j] = node_it->second;
 
+                //Node doesn't exist, add new node to adjacency list & info vector, and respective hash and node index to map
                 else
                 {
-                    //Add new node to adjacency list & info vector, and respective hash and node index to map
                     node_index[j] = adj_list.size();
                     node_inf.emplace_back(edge_vector[i]->pos[j].x, edge_vector[i]->pos[j].y);
                     adj_list.push_back(std::vector<int>());
@@ -325,44 +296,34 @@ namespace voronoi_path
 
         //Duplicate adj_list for use in removing excess branches
         auto ori_adj_list = adj_list;
-        for (int i = 0; i < adj_list.size(); ++i)
+        for (int node_num = 0; node_num < adj_list.size(); ++node_num)
         {
             //Singly connected node
-            if (adj_list[i].size() == 1)
+            if (adj_list[node_num].size() == 1)
             {
                 //Check through all node_inf to see if there are any within distance threshold
                 for (int j = 0; j < node_inf.size(); ++j)
                 {
                     //If the node being checked is i or is already connected to i, adj_list[i] only has 1 element
-                    if (j == i || adj_list[i].back() == j)
+                    if (j == node_num || adj_list[node_num].back() == j)
                         continue;
 
-                    double dist = pow(node_inf[j].x - node_inf[i].x, 2) + pow(node_inf[j].y - node_inf[i].y, 2);
+                    double dist = pow(node_inf[j].x - node_inf[node_num].x, 2) + pow(node_inf[j].y - node_inf[node_num].y, 2);
                     if (dist <= threshold)
                     {
-                        adj_list[i].push_back(j);
-                        adj_list[j].push_back(i);
+                        adj_list[node_num].push_back(j);
+                        adj_list[j].push_back(node_num);
                         break;
                     }
 
                     //If singly connected node is unable to connect to anything else
                     if (j == node_inf.size() - 1)
-                        removeExcessBranch(ori_adj_list, i);
+                        removeExcessBranch(ori_adj_list, node_num);
                 }
             }
         }
 
-        if (print_timings)
-        {
-            std::cout << "Number of nodes: " << adj_list.size() << std::endl;
-            section_profiler.print("mapToGraph convert edges to adjacency");
-            complete_profiler.print("mapToGraph total time");
-        }
-
         num_nodes = adj_list.size();
-
-        jcv_diagram_free(&diagram);
-        free(points);
         return true;
     }
 
@@ -411,6 +372,9 @@ namespace voronoi_path
     bool voronoi_path::getEdges(std::vector<GraphNode> &edges)
     {
         std::lock_guard<std::mutex> lock(voronoi_mtx);
+
+        // Total number is unknown, reserve minimum amount needed
+        edges.reserve(num_nodes);
         for (int i = 0; i < num_nodes; ++i)
         {
             for (int j = 0; j < adj_list[i].size(); ++j)
@@ -460,15 +424,14 @@ namespace voronoi_path
 
     bool voronoi_path::interpolateContractPaths(std::vector<Path> &paths)
     {
-        //Increase resolution of paths before contracting to give smoother result
-        interpolatePaths(paths);
+        //Increase resolution of paths by interpolation before contracting to give smoother result
+        interpolatePaths(paths, path_waypoint_sep);
         for (auto &path : paths)
             contractPath(path.path);
 
         return true;
     }
 
-    //Iterative trimming of path
     bool voronoi_path::contractPath(std::vector<GraphNode> &path)
     {
         //Calculate minimum distance between two poses in path should have, distance in pix squared
@@ -573,13 +536,9 @@ namespace voronoi_path
     std::vector<Path> voronoi_path::getPath(const GraphNode &start, const GraphNode &end, const int &num_paths)
     {
         //Block until voronoi is no longer being updated. Prevents issue where planning is done using an empty adjacency list
-        auto lock_start = std::chrono::system_clock::now();
         std::lock_guard<std::mutex> lock(voronoi_mtx);
 
-        if (print_timings)
-            std::cout << "Get path lock duration: " << (std::chrono::system_clock::now() - lock_start).count() / 1000000000.0 << "\n";
-
-        auto start_time = std::chrono::system_clock::now();
+        Profiler complete_profiler, section_profiler;
         std::vector<Path> path;
 
         //Find nearest node to starting and end positions
@@ -587,22 +546,22 @@ namespace voronoi_path
         if (!getNearestNode(start, end, start_node, end_node))
             return std::vector<Path>();
 
+        if (print_timings)
+            section_profiler.print("getPath find nearest node");
+
         std::vector<int> shortest_path;
-        double cost;
-        auto shortest_time = std::chrono::system_clock::now();
-        if (findShortestPath(start_node, end_node, shortest_path, cost))
+        if (findShortestPath(start_node, end_node, shortest_path))
         {
             if (print_timings)
-                std::cout << "Find shortest path: \t" << ((std::chrono::system_clock::now() - shortest_time).count() / 1000000000.0) << "s\n";
+                section_profiler.print("getPath find shortest path");
 
             std::vector<std::vector<int>> all_paths;
-            auto kth_time = std::chrono::system_clock::now();
             //Get next shortest path
             if (num_paths >= 1)
                 kthShortestPaths(start_node, end_node, shortest_path, all_paths, num_paths - 1);
 
             if (print_timings)
-                std::cout << "Find alternate paths: \t" << ((std::chrono::system_clock::now() - kth_time).count() / 1000000000.0) << "s\n";
+                section_profiler.print("getPath find kth shortest paths");
 
             //Copy all_paths into new container which include start and end
             std::vector<Path> all_path_nodes;
@@ -618,22 +577,25 @@ namespace voronoi_path
                 all_path_nodes[i].path.push_back(end);
             }
 
+            if (print_timings)
+                section_profiler.print("getPath insert start and end");
+
             //Trim beginning of path to remove unnecessary u-turns in path
             interpolateContractPaths(all_path_nodes);
 
-            //Only set previous paths and their costs if this was the first call
+            if (print_timings)
+                section_profiler.print("getPath interpolate and contract");
+                
+            //Only set previous paths and their costs if this was the first getPath call
             if (!hasPreviousPaths())
             {
                 previous_paths = all_path_nodes;
-                previous_path_costs.resize(all_path_nodes.size());
+                previous_path_costs = std::vector<double>(all_path_nodes.size(), 0);
 
                 for (int j = 0; j < all_path_nodes.size(); ++j)
                 {
-                    double total_cost = 0;
                     for (int i = 0; i < all_path_nodes[j].path.size() - 1; ++i)
-                        total_cost += euclideanDist(all_path_nodes[j].path[i], all_path_nodes[j].path[i + 1]);
-
-                    previous_path_costs[j] = total_cost;
+                        previous_path_costs[j] += euclideanDist(all_path_nodes[j].path[i], all_path_nodes[j].path[i + 1]);
                 }
 
                 //Swap minimum cost path with first in list, sometimes after contraction the first index path is no longer the shortest
@@ -641,12 +603,15 @@ namespace voronoi_path
                 int ind = std::distance(previous_path_costs.begin(), min_it);
                 std::swap(previous_path_costs[0], previous_path_costs[ind]);
                 std::swap(all_path_nodes[0], all_path_nodes[ind]);
+
+                if (print_timings)
+                    section_profiler.print("getPath get all initial costs");
             }
 
             path = std::move(all_path_nodes);
 
             if (print_timings)
-                std::cout << "Find all paths, including time to find nearest node: \t" << ((std::chrono::system_clock::now() - start_time).count() / 1000000000.0) << "s\n";
+                complete_profiler.print("getPath find all paths");
         }
 
         else
@@ -657,21 +622,17 @@ namespace voronoi_path
 
     std::vector<Path> voronoi_path::replan(GraphNode &start, GraphNode &end, int num_paths, int &pref_path)
     {
-        auto start_time = std::chrono::system_clock::now();
-        double cum_time = 0;
+        Profiler complete_profiler, contract_profiler;
         if (previous_paths.empty())
             return previous_paths;
 
         /********** TRIMMING OR EXTENSION OF PATHS FOUND IN PREVIOUS TIME STEP **********/
-        auto contract_start_time = std::chrono::system_clock::now();
+        //Add robot's current position to the first pose of the replanned_paths
         bool found_new_start = false;
         std::vector<Path> replanned_paths(previous_paths);
         for (int i = 0; i < replanned_paths.size(); ++i)
         {
             //Search nearby area around robot to find an empty cell to connect to the previous path
-            //FIXME: For some reason, if collision is found and a new start point is found, some
-            //paths still have collision with the new start point, even tho theoretically all first poses
-            //in previous paths should be identical
             if (!found_new_start && edgeCollides(replanned_paths[i].path[0], start, trimming_collision_threshold))
             {
                 //Current radius in pixels and angle in rads
@@ -680,10 +641,10 @@ namespace voronoi_path
                 while (current_radius <= max_pix_radius && !found_new_start)
                 {
                     current_angle = 0;
-                    // s = r(theta), solve theta such that s == 1, 1 pixel
-                    double increment = 1.0 / current_radius;
+                    double increment = 1.0 / current_radius; // s = r(theta), solve theta such that s == 1, 1 pixel
                     while (current_angle < 2 * M_PI && !found_new_start)
                     {
+                        // If the candidate start position doesn't collide with anything when joined to first pose of path
                         GraphNode candidate_start(start.x + cos(current_angle) * current_radius, start.y + sin(current_angle) * current_radius);
                         if (!edgeCollides(candidate_start, replanned_paths[i].path[0], trimming_collision_threshold))
                         {
@@ -702,83 +663,67 @@ namespace voronoi_path
                     std::cout << "WARN: No empty cell within search radius: " << search_radius << "m\n";
             }
 
-            //No insert and trim if a nearby empty cell is not found
+            //Insert the robot's current position/new starting posititon as the first pose of path
             replanned_paths[i].path.insert(replanned_paths[i].path.begin(), start);
         }
 
-        auto contract_start = std::chrono::system_clock::now();
         interpolateContractPaths(replanned_paths);
-        cum_time += (std::chrono::system_clock::now() - contract_start).count() / 1000000000.0;
 
         if (print_timings)
-        {
-            std::cout << "Contract and join path time: " << (std::chrono::system_clock::now() - contract_start_time).count() / 1000000000.0 << "\n";
-            std::cout << "Contract cum path time: " << cum_time << "\n";
-        }
+            contract_profiler.print("replan contract and join total");
 
         /********** HOMOTOPY EXPLORATION TO FIND NEW PATHS **********/
         //Explore for potential paths in new homotopy classes
         std::vector<Path> potential_paths = getPath(start, end, num_paths / 2);
 
-        //Calculate homotopy class of previous set of paths, remove any duplicates
-        auto homotopy_calc_start = std::chrono::system_clock::now();
+        //Calculate homotopy class of previous set of paths
+        Profiler homotopy_profiler;
         std::vector<std::complex<double>> previous_classes;
-        auto path_it = replanned_paths.begin();
-        while (path_it < replanned_paths.end())
-        {
-            previous_classes.push_back(calcHomotopyClass(path_it->path));
-            ++path_it;
-        }
-        if (print_timings)
-            std::cout << "Replan homotopy calc: " << (std::chrono::system_clock::now() - homotopy_calc_start).count() / 1000000000.0 << "\n";
+        for (const auto &path : replanned_paths)
+            previous_classes.push_back(calcHomotopyClass(path.path));
 
-        auto check_unique_start = std::chrono::system_clock::now();
+        if (print_timings)
+            homotopy_profiler.print("replan homotopy calc");
+
         // Add potential paths that are unique to replanned_paths container
         for (const auto &path : potential_paths)
         {
             std::complex<double> temp_class = calcHomotopyClass(path.path);
-            for (int k = 0; k < previous_classes.size(); ++k)
-            {
-                //Path is not unique
-                if (!isClassDifferent(temp_class, previous_classes[k]))
-                    break;
+            bool unique = true;
+            for (const auto &prev_class : previous_classes)
+                if (!isClassDifferent(temp_class, prev_class))
+                    unique = false;
 
-                //Path is unique since all paths have been checked
-                if (k == previous_classes.size() - 1)
-                    replanned_paths.push_back(path);
-            }
+            if (unique)
+                replanned_paths.push_back(path);
         }
+
         if (print_timings)
-            std::cout << "Check homotopy: " << (std::chrono::system_clock::now() - check_unique_start).count() / 1000000000.0 << "\n";
+            homotopy_profiler.print("replan check homotopy unique");
 
         //Get cost of all the paths
-        auto get_all_costs_start = std::chrono::system_clock::now();
-        std::vector<double> all_paths_cost(replanned_paths.size());
+        std::vector<double> all_paths_cost(replanned_paths.size(), 0);
         for (int j = 0; j < replanned_paths.size(); ++j)
         {
-            double total_cost = 0;
             for (int i = 0; i < replanned_paths[j].path.size() - 1; ++i)
-                total_cost += euclideanDist(replanned_paths[j].path[i], replanned_paths[j].path[i + 1]);
-
-            all_paths_cost[j] = total_cost;
+                all_paths_cost[j] += euclideanDist(replanned_paths[j].path[i], replanned_paths[j].path[i + 1]);
         }
-        if (print_timings)
-            std::cout << "Get all costs replan: " << (std::chrono::system_clock::now() - get_all_costs_start).count() / 1000000000.0 << "\n";
 
-        //Assign -ve infinity cost to currently (selected) preferred path, prevent from deletion
+        if (print_timings)
+            homotopy_profiler.print("replan get all costs");
+
+        //Assign -ve infinity cost to currently (selected) preferred path, prevent deletion
         double pref_path_cost = all_paths_cost[pref_path];
         all_paths_cost[pref_path] = -std::numeric_limits<double>::infinity();
 
         //If number of paths greater than num_paths, delete longest paths until equal
-        Path chosen_path;
-        double chosen_cost;
         while (replanned_paths.size() > num_paths)
         {
             auto max_it = std::max_element(all_paths_cost.begin(), all_paths_cost.end());
             int ind = std::distance(all_paths_cost.begin(), max_it);
 
-            //If max element is greater than or equal to num_paths limit, means it is a potential path, just delete
             //Order of paths < num_paths must be maintained
+            //If max element is greater than or equal to num_paths limit, means it is a potential path, just delete
             if (ind >= num_paths)
             {
                 all_paths_cost.erase(max_it);
@@ -796,7 +741,7 @@ namespace voronoi_path
             }
         }
 
-        //Replace pref path cost
+        //Restore pref path cost
         all_paths_cost[pref_path] = pref_path_cost;
 
         //Update previous paths and their costs for the next round of replanning
@@ -804,23 +749,18 @@ namespace voronoi_path
         previous_path_costs = all_paths_cost;
 
         if (print_timings)
-            std::cout << "Total replan time: " << (std::chrono::system_clock::now() - start_time).count() / 1000000000.0 << "\n";
+            complete_profiler.print("replan total replan time");
 
         return replanned_paths;
     }
 
     bool voronoi_path::getNearestNode(const GraphNode &start, const GraphNode &end, int &start_node, int &end_node)
     {
-        Profiler complete_profiler;
         //TODO: Should not only check nearest nodes. Should allow nearest position to be on an edge
-
         double min_start_dist = std::numeric_limits<double>::infinity();
         double min_end_dist = std::numeric_limits<double>::infinity();
         start_node = -1;
         end_node = -1;
-
-        double temp_end_dist, temp_start_dist;
-        GraphNode curr;
 
         //Traverse all nodes to find the one with minimum distance from start and end points
         for (int i = 0; i < num_nodes; ++i)
@@ -828,12 +768,8 @@ namespace voronoi_path
             if (adj_list[i].empty())
                 continue;
 
-            curr.x = node_inf[i].x;
-            curr.y = node_inf[i].y;
-
-            //If potential starting node brings robot towards end goal
-            temp_start_dist = pow(curr.x - start.x, 2) + pow(curr.y - start.y, 2);
-
+            GraphNode curr = node_inf[i];
+            double temp_start_dist = pow(curr.x - start.x, 2) + pow(curr.y - start.y, 2);
             if (temp_start_dist < min_start_dist)
             {
                 if (!edgeCollides(start, curr, collision_threshold))
@@ -843,7 +779,7 @@ namespace voronoi_path
                 }
             }
 
-            temp_end_dist = pow(curr.x - end.x, 2) + pow(curr.y - end.y, 2);
+            double temp_end_dist = pow(curr.x - end.x, 2) + pow(curr.y - end.y, 2);
             if (temp_end_dist < min_end_dist)
             {
                 if (!edgeCollides(end, curr, collision_threshold))
@@ -861,15 +797,13 @@ namespace voronoi_path
             return false;
         }
 
-        if (print_timings)
-            complete_profiler.print("getNearestNode get nearest node");
-
         return true;
     }
 
     std::vector<GraphNode> voronoi_path::convertToPixelPath(const std::vector<int> &path_)
     {
         std::vector<GraphNode> return_path;
+        return_path.reserve(path_.size());
         for (const auto &node : path_)
             return_path.emplace_back(node_inf[node].x, node_inf[node].y);
 
@@ -886,7 +820,7 @@ namespace voronoi_path
         for (const auto &node : path_)
             path.emplace_back(node.x, node.y);
 
-        //Go through each edge of the path
+        //Go through each edge of the path and calculate its homotopy value
         std::complex<double> path_sum(0, 0);
         int num_threads = std::thread::hardware_concurrency();
         std::vector<std::future<std::complex<double>>> future_vector;
@@ -904,12 +838,11 @@ namespace voronoi_path
 
             future_vector.emplace_back(std::async(
                 std::launch::async,
-                [&, start_pose, poses_per_thread, path](const std::vector<std::complex<double>> &centers) {
+                [&, start_pose, poses_per_thread, path]() {
                     std::complex<double> path_sum(0, 0);
                     for (int i = start_pose + 1; i < start_pose + poses_per_thread + 1; i++)
                     {
                         std::complex<double> edge_sum(0, 0);
-
                         if (i >= path.size())
                             continue;
 
@@ -933,32 +866,21 @@ namespace voronoi_path
                     }
 
                     return path_sum;
-                },
-                std::ref(centers)));
+                }));
         }
 
         for (int i = 0; i < future_vector.size(); ++i)
         {
-            future_vector[i].wait();
             std::complex<double> temp_sum = future_vector[i].get();
             path_sum += temp_sum;
         }
+
         return path_sum;
     }
 
     bool voronoi_path::kthShortestPaths(const int &start_node, const int &end_node, const std::vector<int> &shortestPath, std::vector<std::vector<int>> &all_paths, const int &num_paths)
     {
-        double adjacency_cum_time = 0;
-        double copy_root_cum_time = 0;
-        double disconnect_edge_cum_time = 0;
-        double remove_nodes_cum_time = 0;
-        double spur_path_cum_time = 0;
-        double copy_kth_cum_time = 0;
-        double get_total_cost_time = 0;
-        double calc_homotopy_cum_time = 0;
-        double check_uniqueness_cum_time = 0;
-        double check_min_homotopy_cum_time = 0;
-
+        //Reserve num_paths + 1, + 1 is to store the original shortest path
         all_paths.reserve(num_paths + 1);
 
         if (num_paths == 0)
@@ -967,15 +889,17 @@ namespace voronoi_path
             return true;
         }
 
+        //Create container to store accepted kth shortest paths
         std::vector<std::vector<int>> kthPaths;
         kthPaths.reserve(num_paths + 1);
         kthPaths.push_back(shortestPath);
 
+        //Create backup of adjacency as well as modified indices to reduce time required for restoring original list
         std::vector<std::vector<int>> adj_list_backup(adj_list);
         std::vector<int> adj_list_modified_ind;
 
-        std::vector<std::vector<int>> potentialKth;
-        std::vector<std::pair<double, int>> cost_index_vec;
+        //Containers to store candidate kth shortest paths and their costs, and homotopy classes of all accepted paths
+        std::vector<std::pair<double, std::vector<int>>> potentialKth;
         std::vector<std::complex<double>> homotopy_classes;
 
         for (int k = 1; k <= num_paths; ++k)
@@ -984,10 +908,8 @@ namespace voronoi_path
             if (k - 1 == kthPaths.size())
                 break;
 
-            auto calc_homo_start = std::chrono::system_clock::now();
             //Update homotopy classes vector whenever new kth path gets added
-            homotopy_classes.push_back(std::move(calcHomotopyClass(convertToPixelPath(kthPaths.back()))));
-            calc_homotopy_cum_time += (std::chrono::system_clock::now() - calc_homo_start).count() / 1000000000.0;
+            homotopy_classes.push_back(calcHomotopyClass(convertToPixelPath(kthPaths.back())));
 
             //Spur node is ith node, from start to 2nd last node of path, inclusive
             for (int i = 0; i < kthPaths[k - 1].size() - 1; ++i)
@@ -995,43 +917,36 @@ namespace voronoi_path
                 int spurNode = kthPaths[k - 1][i];
 
                 //Copy root path into container. Root path is path up until spur node, containing the path from start onwards
-                auto copy_root_time = std::chrono::system_clock::now();
                 std::vector<int> rootPath(i + 1);
                 std::copy(kthPaths[k - 1].begin(), kthPaths[k - 1].begin() + i + 1, rootPath.begin());
-                copy_root_cum_time += (std::chrono::system_clock::now() - copy_root_time).count() / 1000000000.0;
 
                 //Disconnect edges if root path has already been discovered before
-                auto disconnect_edges_time = std::chrono::system_clock::now();
-                for (auto paths : kthPaths)
+                for (const auto & prevKthPath : kthPaths)
                 {
                     int equal_count = 0;
                     for (int z = 0; z <= i; ++z)
                     {
-                        if (z >= paths.size() || z >= rootPath.size())
+                        if (z >= prevKthPath.size() || z >= rootPath.size())
                             break;
 
-                        if (paths[z] == rootPath[z])
+                        if (prevKthPath[z] == rootPath[z])
                             equal_count++;
                     }
 
-                    //Entire root path is identical
-                    if (equal_count == rootPath.size() && i + 1 < paths.size())
+                    //Entire root path is identical to previously discovered kth path, disconnect edge between spur_next and spurNode
+                    if (equal_count == rootPath.size() && i + 1 < prevKthPath.size())
                     {
-                        //Remove edge from spurNode to spur_next
-                        int spur_next = paths[i + 1];
+                        //Remove edge from spurNode to spur_next by setting spur_next in spurNode's adjacency to -1
+                        int spur_next = prevKthPath[i + 1];
                         auto erase_it = std::find(adj_list[spurNode].begin(), adj_list[spurNode].end(), spur_next);
-
-                        //Edge not removed yet
                         if (erase_it != adj_list[spurNode].end())
                         {
                             adj_list[spurNode][erase_it - adj_list[spurNode].begin()] = -1;
                             adj_list_modified_ind.push_back(spurNode);
                         }
 
-                        //Remove edge from spur_next to spurNode
+                        //Remove edge from spur_next to spurNode by setting spurNode in spur_next's adjacency to -1
                         erase_it = std::find(adj_list[spur_next].begin(), adj_list[spur_next].end(), spurNode);
-
-                        //Edge not removed yet
                         if (erase_it != adj_list[spur_next].end())
                         {
                             adj_list[spur_next][erase_it - adj_list[spur_next].begin()] = -1;
@@ -1039,22 +954,18 @@ namespace voronoi_path
                         }
                     }
                 }
-                disconnect_edge_cum_time += (std::chrono::system_clock::now() - disconnect_edges_time).count() / 1000000000.0;
 
                 //Remove all nodes of root path from graph except spur node and start node
-                auto node_start_time = std::chrono::system_clock::now();
-
                 //Exclude spurNode (rootPath.back())
                 for (int node_ind = 0; node_ind < rootPath.size() - 1; ++node_ind)
                 {
                     int node = rootPath[node_ind];
-
                     for (int del_ind = 0; del_ind < adj_list[node].size(); ++del_ind)
                     {
                         //Remove connection from point-er side
                         int pointed_to = adj_list[node][del_ind];
 
-                        //Edge is not deleted
+                        //Edge is not deleted yet, continue to delete
                         if (pointed_to != -1)
                         {
                             adj_list[node][del_ind] = -1;
@@ -1070,39 +981,28 @@ namespace voronoi_path
                         }
                     }
                 }
-                remove_nodes_cum_time += (std::chrono::system_clock::now() - node_start_time).count() / 1000000000.0;
 
+                //Find spur path starting from spur node using A* algorithm shortest path searching with modified adj_list
                 std::vector<int> spur_path;
-                double cost;
-
-                //if spur path is found
-                auto find_spur_path_start = std::chrono::system_clock::now();
-                if (findShortestPath(spurNode, end_node, spur_path, cost))
+                if (findShortestPath(spurNode, end_node, spur_path))
                 {
-                    spur_path_cum_time += (std::chrono::system_clock::now() - find_spur_path_start).count() / 1000000000.0;
-
+                    //Create full path from root path and spur path
                     std::vector<int> total_path;
-
-                    auto check_unique_start = std::chrono::system_clock::now();
                     if (rootPath.size())
                         total_path.insert(total_path.begin(), rootPath.begin(), rootPath.end() - 1);
                     total_path.insert(total_path.end(), spur_path.begin(), spur_path.end());
 
-                    //Check if the path just generated is unique in the potential k paths
+                    //Make sure to check all paths, one container might be bigger. Set last ind to larger container's size
+                    int last = kthPaths.size() > potentialKth.size() ? kthPaths.size() : potentialKth.size();
+
+                    //Check if the path just generated is unique in the potential kth paths
                     bool path_is_unique = true;
-
-                    //Make sure to check all paths
-                    int last = potentialKth.size();
-                    if (kthPaths.size() > potentialKth.size())
-                        last = kthPaths.size();
-
-                    int kth_equal, pot_equal;
                     for (int check_path = 0; check_path < last; ++check_path)
                     {
-                        kth_equal = 0;
-                        pot_equal = 0;
+                        int kth_equal = 0;
+                        int pot_equal = 0;
 
-                        for (int node_pot = 0; node_pot < total_path.size(); ++node_pot)
+                        for (const auto & node_pot : total_path)
                         {
                             //Compare with kthPaths
                             if (check_path < kthPaths.size())
@@ -1115,8 +1015,8 @@ namespace voronoi_path
                             //Compare with potentialKths
                             if (check_path < potentialKth.size())
                             {
-                                if (node_pot < potentialKth[check_path].size())
-                                    if (potentialKth[check_path][node_pot] == total_path[node_pot])
+                                if (node_pot < potentialKth[check_path].second.size())
+                                    if (potentialKth[check_path].second[node_pot] == total_path[node_pot])
                                         pot_equal++;
                             }
                         }
@@ -1124,10 +1024,8 @@ namespace voronoi_path
                         if (pot_equal == total_path.size() || kth_equal == total_path.size())
                             path_is_unique = false;
                     }
-                    check_uniqueness_cum_time += (std::chrono::system_clock::now() - check_unique_start).count() / 1000000000.0;
 
-                    //add unique path to potentials
-                    auto get_total_start = std::chrono::system_clock::now();
+                    //Add unique path to list of potential kth paths
                     if (path_is_unique)
                     {
                         //Get cost of total path
@@ -1135,20 +1033,18 @@ namespace voronoi_path
                         for (int int_node = 0; int_node < total_path.size() - 1; ++int_node)
                             total_cost += euclideanDist(node_inf[total_path[int_node]], node_inf[total_path[int_node + 1]]);
 
-                        cost_index_vec.push_back(std::make_pair(total_cost, potentialKth.size()));
-                        potentialKth.push_back(std::move(total_path));
+                        //Store path and its corresponding cost as a pair
+                        // cost_index_vec.emplace_back(total_cost, potentialKth.size());
+                        potentialKth.emplace_back(total_cost, std::move(total_path));
                     }
-                    get_total_cost_time += (std::chrono::system_clock::now() - get_total_start).count() / 1000000000.0;
                 }
 
-                auto restore_start = std::chrono::system_clock::now();
                 //Reset adj_list before changing spur node
-                for (const auto &mod_node : adj_list_modified_ind)
-                    adj_list[mod_node] = adj_list_backup[mod_node];
+                for (const auto & modified_node : adj_list_modified_ind)
+                    adj_list[modified_node] = adj_list_backup[modified_node];
 
                 adj_list_modified_ind.clear();
                 adj_list_modified_ind.shrink_to_fit();
-                adjacency_cum_time += (std::chrono::system_clock::now() - restore_start).count() / 1000000000.0;
             }
 
             //No alternate paths found
@@ -1156,63 +1052,36 @@ namespace voronoi_path
                 break;
 
             //Sort costs of paths
-            std::sort(cost_index_vec.begin(), cost_index_vec.end());
+            std::sort(potentialKth.begin(), potentialKth.end());
 
-            //Check whether paths are unique, starting from lowest cost path, breaks when lowest cost path is unique
-            auto it = cost_index_vec.begin();
-            while (it != cost_index_vec.end())
+            //Check whether paths are unique and erase non-unique paths, starting from lowest cost path, breaks when lowest cost path is unique
+            auto path_it = potentialKth.begin();
+            int h = 0; //Path is unique if h == homotopy_classes.size()
+            while (path_it < potentialKth.end() && h != homotopy_classes.size())
             {
-                calc_homo_start = std::chrono::system_clock::now();
-
                 //Get homotopy class of the path that is currently being considered
-                std::complex<double> curr_h_class = calcHomotopyClass(convertToPixelPath(potentialKth[it->second]));
-                calc_homotopy_cum_time += (std::chrono::system_clock::now() - calc_homo_start).count() / 1000000000.0;
-
-                auto check_min_homo_start = std::chrono::system_clock::now();
-                int h = 0;
+                std::complex<double> curr_h_class = calcHomotopyClass(convertToPixelPath(path_it->second));
                 for (h = 0; h < homotopy_classes.size(); ++h)
                 {
                     //Path is not unique
                     if (!isClassDifferent(curr_h_class, homotopy_classes[h]))
                     {
-                        //Erase and then break if not unique
-                        it = cost_index_vec.erase(it);
+                        //Erase and then break if not unique, set path_it to the new iterator of path behind deleted path
+                        path_it = potentialKth.erase(path_it);
                         break;
                     }
                 }
-
-                //Path is unique
-                if (h == homotopy_classes.size())
-                    break;
-                check_min_homotopy_cum_time += (std::chrono::system_clock::now() - check_min_homo_start).count() / 1000000000.0;
             }
 
-            auto copy_kth = std::chrono::system_clock::now();
-            if (!cost_index_vec.empty())
+            //If there are remaining unique paths, add the shortest one to kthPaths
+            if (!potentialKth.empty())
             {
-                kthPaths.push_back(potentialKth[cost_index_vec[0].second]);
-                cost_index_vec.erase(cost_index_vec.begin());
+                kthPaths.push_back(std::move(potentialKth[0].second));
+                potentialKth.erase(potentialKth.begin());
             }
-
-            copy_kth_cum_time += (std::chrono::system_clock::now() - copy_kth).count() / 1000000000.0;
         }
 
         all_paths.insert(all_paths.begin(), kthPaths.begin(), kthPaths.end());
-
-        if (print_timings)
-        {
-            std::cout << "Cum adjacency list restore: " << adjacency_cum_time << "\n";
-            std::cout << "Cum copy root path: " << copy_root_cum_time << "\n";
-            std::cout << "Cum disconnect edges: " << disconnect_edge_cum_time << "\n";
-            std::cout << "Cum remove nodes of root path: " << remove_nodes_cum_time << "\n";
-            std::cout << "Cum find spur path: " << spur_path_cum_time << "\n";
-            std::cout << "Cum copy kth path: " << copy_kth_cum_time << "\n";
-            std::cout << "Cum get total cost: " << get_total_cost_time << "\n";
-            std::cout << "Cum calc homotopy: " << calc_homotopy_cum_time << "\n";
-            std::cout << "Cum check unique: " << check_uniqueness_cum_time << "\n";
-            std::cout << "Cum check min homotopy: " << check_min_homotopy_cum_time << "\n";
-        }
-
         if (num_paths == all_paths.size() - 1)
             return true;
 
@@ -1220,76 +1089,63 @@ namespace voronoi_path
             return false;
     }
 
-    bool voronoi_path::findShortestPath(const int &start_node, const int &end_node, std::vector<int> &path, double &cost)
+    bool voronoi_path::findShortestPath(const int &start_node, const int &end_node, std::vector<int> &path)
     {
-        auto start_time = std::chrono::system_clock::now();
+        //Create open list, boolean closed_list, and list storing previous node required to reach node at index i
         std::vector<std::pair<int, NodeInfo>> open_list;
         std::vector<bool> nodes_closed_bool(num_nodes, false);
         std::vector<int> nodes_prev(num_nodes, -1);
 
+        //Variable to store starting node's A* parameters
         NodeInfo start_info;
         start_info.cost_upto_here = 0;
         start_info.cost_to_goal = euclideanDist(node_inf[start_node], node_inf[end_node]);
         start_info.updateCost();
+
+        //Place first node into open list to begin exploration
         open_list.emplace_back(std::make_pair(start_node, start_info));
 
         GraphNode end_node_location = node_inf[end_node];
-        GraphNode curr_node_location;
         GraphNode next_node_location;
         NodeInfo curr_node_info;
-        int curr_node = start_node;
-        int min_ind = 0;
         int next_node;
 
         //Run until the end_node enters the closed list
         while (!nodes_closed_bool[end_node])
         {
-            curr_node = open_list[0].first;
-            curr_node_location = node_inf[curr_node];
+            //Get current node from first item of open list
+            int curr_node = open_list[0].first;
+            GraphNode curr_node_location = node_inf[curr_node];
 
             //Get info for current node
-            auto open_start = std::chrono::system_clock::now();
             curr_node_info = open_list[0].second;
-            open_list_time += (std::chrono::system_clock::now() - open_start).count() / 1000000000.0;
-            cost = curr_node_info.total_cost;
 
             //Loop all adjacent nodes of current node
             for (int i = 0; i < adj_list[curr_node].size(); ++i)
             {
                 next_node = adj_list[curr_node][i];
 
-                //Edge has been deleted
-                if (next_node == -1)
+                //Edge has been deleted or node is already in closed list
+                if (next_node == -1 || nodes_closed_bool[next_node])
                     continue;
-
-                //If next node is in closed list, skip
-                auto closed_start = std::chrono::system_clock::now();
-
-                if (nodes_closed_bool[next_node])
-                    continue;
-
-                closed_list_time += (std::chrono::system_clock::now() - closed_start).count() / 1000000000.0;
 
                 //Get the location of the next node
                 next_node_location = node_inf[next_node];
 
-                //Calculate cost upto the next node from start node
-                double start_to_next_dist = euclideanDist(curr_node_location, next_node_location) + curr_node_info.cost_upto_here;
+                //Calculate cost upto the next node from curr node
+                double curr_to_next_dist = euclideanDist(curr_node_location, next_node_location) + curr_node_info.cost_upto_here;
 
-                //Find next_node in open_list
-                auto open_start = std::chrono::system_clock::now();
-
+                //Find next_node in open_list to check whether or not to add into open list
                 auto it = std::find_if(open_list.begin(), open_list.end(),
                                        [&next_node](const std::pair<int, NodeInfo> &in) {
                                            return in.first == next_node;
                                        });
 
-                open_list_time += (std::chrono::system_clock::now() - open_start).count() / 1000000000.0;
-                //If node is not in open list yet
+                //If node is not in open list yet, add to open list
                 if (it == open_list.end())
                 {
                     NodeInfo new_node;
-                    new_node.cost_upto_here = start_to_next_dist;
+                    new_node.cost_upto_here = curr_to_next_dist;
                     new_node.cost_to_goal = euclideanDist(end_node_location, next_node_location);
                     new_node.updateCost();
                     nodes_prev[next_node] = curr_node;
@@ -1297,13 +1153,14 @@ namespace voronoi_path
                     open_list.emplace_back(std::make_pair(next_node, new_node));
                 }
 
+                //Update open list's cost if this new cost is smaller
                 else
                 {
                     //Update node's nearest distance to reach here, if the new cost is lower
-                    if (start_to_next_dist < it->second.cost_upto_here)
+                    if (curr_to_next_dist < it->second.cost_upto_here)
                     {
                         //Update cost upto here. Cost to goal doesn't change
-                        it->second.cost_upto_here = start_to_next_dist;
+                        it->second.cost_upto_here = curr_to_next_dist;
                         it->second.updateCost();
                         nodes_prev[next_node] = curr_node;
                     }
@@ -1316,7 +1173,7 @@ namespace voronoi_path
             //Then put into closed list
             nodes_closed_bool[curr_node] = true;
 
-            // Find minimum total_cost in open_list
+            //Sort open list by ascending total cost
             if (!open_list.empty())
             {
                 //Sort by pair's second element.total_cost
@@ -1325,14 +1182,15 @@ namespace voronoi_path
                 });
             }
 
+            //No path is found since end node is not in closed list and open list is empty
             else
-                break;
+                return false;
         }
-        find_path_time += (std::chrono::system_clock::now() - start_time).count() / 1000000000.0;
 
-        auto copy_path_start = std::chrono::system_clock::now();
         //Put nodes into path
         std::vector<int> temp_path;
+
+        //Find path starting from end_node, using nodes_prev to backtrack path
         int path_current_node = end_node;
         temp_path.push_back(path_current_node);
 
@@ -1351,37 +1209,15 @@ namespace voronoi_path
         //Insert path found in reverse order
         path.insert(path.begin(), temp_path.rbegin(), temp_path.rend());
 
-        copy_path_time += (std::chrono::system_clock::now() - copy_path_start).count() / 1000000000.0;
         return true;
     }
 
-    void voronoi_path::removeObstacleVertices()
+    void voronoi_path::removeObstacleVertices(std::vector<const jcv_edge *> &edge_vector)
     {
         //Get edge vertices that are in obtacle
         //Data loaded by map server is upside down. Top of image is last of data array
         //Left right order is the same as in image
         //Meaning map.data reads from image from bottom of image, upwards, left to right
-
-        // //This method is slower
-        // auto it = edge_vector.begin();
-        // while (it < edge_vector.end())
-        // {
-        //     //Check each vertex if is inside obstacle
-        //     for (int j = 0; j < 2; ++j)
-        //     {
-        //         int pixel = floor(it->pos[j].x) + floor(it->pos[j].y) * map.width;
-
-        //         //If vertex pixel in map is not free, remove this edge
-        //         if (map.data[pixel] > collision_threshold)
-        //         {
-        //             it = edge_vector.erase(it);
-        //             continue;
-        //         }
-        //     }
-
-        //     ++it;
-        // }
-
         std::vector<int> delete_indices;
         for (int i = 0; i < edge_vector.size(); ++i)
         {
@@ -1418,29 +1254,30 @@ namespace voronoi_path
             edge_vector.clear();
             edge_vector.insert(edge_vector.begin(), remaining_edges.begin(), remaining_edges.end());
         }
-    }
 
-    void voronoi_path::removeCollisionEdges()
-    {
         // //This method is slower
         // auto it = edge_vector.begin();
-        // while (it != edge_vector.end())
+        // while (it < edge_vector.end())
         // {
-        //     jcv_edge curr_edge = *it;
-
-        //     GraphNode start(curr_edge.pos[0].x, curr_edge.pos[0].y);
-        //     GraphNode end(curr_edge.pos[1].x, curr_edge.pos[1].y);
-
-        //     //If vertex pixel in map is not free, remove this edge
-        //     if (edgeCollides(start, end))
+        //     //Check each vertex if is inside obstacle
+        //     for (int j = 0; j < 2; ++j)
         //     {
-        //         it = edge_vector.erase(it);
-        //         continue;
+        //         int pixel = floor(it->pos[j].x) + floor(it->pos[j].y) * map.width;
+
+        //         //If vertex pixel in map is not free, remove this edge
+        //         if (map.data[pixel] > collision_threshold)
+        //         {
+        //             it = edge_vector.erase(it);
+        //             continue;
+        //         }
         //     }
 
         //     ++it;
         // }
+    }
 
+    void voronoi_path::removeCollisionEdges(std::vector<const jcv_edge *> &edge_vector)
+    {
         std::vector<int> delete_indices;
         for (int i = 0; i < edge_vector.size(); ++i)
         {
@@ -1472,6 +1309,25 @@ namespace voronoi_path
             edge_vector.clear();
             edge_vector.insert(edge_vector.begin(), remaining_edges.begin(), remaining_edges.end());
         }
+
+        // //This method is slower
+        // auto it = edge_vector.begin();
+        // while (it != edge_vector.end())
+        // {
+        //     jcv_edge curr_edge = *it;
+
+        //     GraphNode start(curr_edge.pos[0].x, curr_edge.pos[0].y);
+        //     GraphNode end(curr_edge.pos[1].x, curr_edge.pos[1].y);
+
+        //     //If vertex pixel in map is not free, remove this edge
+        //     if (edgeCollides(start, end))
+        //     {
+        //         it = edge_vector.erase(it);
+        //         continue;
+        //     }
+
+        //     ++it;
+        // }
     }
 
     double voronoi_path::vectorAngle(const double vec1[2], const double vec2[2])
@@ -1484,11 +1340,18 @@ namespace voronoi_path
     bool voronoi_path::edgeCollides(const GraphNode &start, const GraphNode &end, int threshold)
     {
         //Check start and end cells first
-        if (map_ptr->data.at(floor(start.x) + floor(start.y) * map_ptr->width) > threshold)
-            return true;
+        try
+        {
+            if (map_ptr->data.at(floor(start.x) + floor(start.y) * map_ptr->width) > threshold)
+                return true;
 
-        if (map_ptr->data.at(floor(end.x) + floor(end.y) * map_ptr->width) > threshold)
-            return true;
+            if (map_ptr->data.at(floor(end.x) + floor(end.y) * map_ptr->width) > threshold)
+                return true;
+        }
+        catch (const std::exception &e)
+        {
+            std::cout << "Exception occurred with edge collision checking, " << e.what() << std::endl;
+        }
 
         double steps = 0;
         double distance = sqrt(pow(start.x - end.x, 2) + pow(start.y - end.y, 2));
@@ -1499,15 +1362,18 @@ namespace voronoi_path
         else
             steps = 1;
 
-        double increment = 1.0 / steps;
-        double curr_step = 0.0;
+        //Calculate linear increment in x and y to reduce computation costs
+        double increment_x = (end.x - start.x) / (double)steps;
+        double increment_y = (end.y - start.y) / (double)steps;
+        GraphNode curr_node = start;
 
-        while (curr_step <= 1.0)
+        for(int i = 0; i <= steps; ++i)
         {
-            double curr_x = (1.0 - curr_step) * start.x + curr_step * end.x;
-            double curr_y = (1.0 - curr_step) * start.y + curr_step * end.y;
+            int pixel = floor(curr_node.x) + floor(curr_node.y) * map_ptr->width;
+            curr_node.x += increment_x;
+            curr_node.y += increment_y;
 
-            int pixel = floor(curr_x) + floor(curr_y) * map_ptr->width;
+            //Double check the pixel is in range of map data
             if (pixel < map_ptr->data.size())
             {
                 if (map_ptr->data[pixel] > threshold)
@@ -1516,8 +1382,6 @@ namespace voronoi_path
 
             else
                 break;
-
-            curr_step += increment;
         }
         return false;
     }
@@ -1537,170 +1401,7 @@ namespace voronoi_path
         return num_nodes;
     }
 
-    int voronoi_path::binomialCoeff(const int &n, const int &k_)
-    {
-        //https://www.geeksforgeeks.org/space-and-time-efficient-binomial-coefficient/
-        int res = 1;
-        int k = k_;
-
-        // Since C(n, k) = C(n, n-k)
-        if (k > n - k)
-            k = n - k;
-
-        // Calculate value of
-        // [n * (n-1) *---* (n-k+1)] / [k * (k-1) *----* 1]
-        for (int i = 0; i < k; ++i)
-        {
-            res *= (n - i);
-            res /= (i + 1);
-        }
-
-        return res;
-    }
-
-    std::vector<GraphNode> voronoi_path::bezierSubsection(std::vector<GraphNode> &points)
-    {
-        if (points.size() == 1)
-            return std::vector<GraphNode>{points[0]};
-
-        //Set first point as reference point
-        double curr_x = points.begin()->x;
-        double curr_y = points.begin()->y;
-        double pixel_threshold = min_node_sep_sq * map_ptr->resolution;
-
-        //Delete points that are too near to each other, starting from 2nd node
-        auto it = points.begin() + 1;
-        while (it < points.end())
-        {
-            //If point is too close, delete then move to next node
-            double dist = pow(it->x - curr_x, 2) + pow(it->y - curr_y, 2);
-            if (dist < pixel_threshold && (it != points.end() - 1))
-            {
-                it = points.erase(it);
-                continue;
-            }
-
-            //Else point was not too far, set as new reference point then increment iterator
-            else
-            {
-                curr_x = it->x;
-                curr_y = it->y;
-                ++it;
-            }
-        }
-
-        int n = points.size() - 1;
-        std::vector<int> combos(n + 1);
-        std::vector<GraphNode> bezier_path;
-
-        //Calculate all required nCk
-        for (int i = 0; i < n + 1; ++i)
-            combos[i] = binomialCoeff(n, i);
-
-        //Bezier interpolation
-        //TODO: Number of points should scale according to path length
-        int num_points = 20;
-        double incre = 1.0 / num_points;
-        for (double t = 0; t <= 1.0 + 0.01; t += incre)
-        {
-            if (t > 1.0)
-                t = 1.0;
-
-            GraphNode sum_point;
-
-            //P_i
-            for (int i = 0; i <= n; ++i)
-            {
-                sum_point += points[i] * combos[i] * pow(1 - t, n - i) * pow(t, i);
-            }
-
-            bezier_path.push_back(sum_point);
-        }
-
-        return bezier_path;
-    }
-
-    bool voronoi_path::bezierInterp(std::vector<Path> &paths)
-    {
-        //Bezier interpolation
-        //TODO: Can be threaded as well
-        //For all paths, j = path number
-        bool had_failure = false;
-        for (int j = 0; j < paths.size(); ++j)
-        {
-            std::vector<GraphNode> bezier_path;
-            int num_of_nodes = paths[j].path.size();
-
-            std::vector<GraphNode> sub_nodes;
-            std::vector<GraphNode> prev_2_nodes;
-
-            //For all nodes in path
-            for (int i = 1; i < num_of_nodes; ++i)
-            {
-                //If adjacent edges in original path collide, then something is wrong with map
-                //Return empty path because the original path has collision, not feasible
-                if (edgeCollides(paths[j].path[i - 1], paths[j].path[i], collision_threshold))
-                {
-                    had_failure = true;
-                    break;
-                }
-
-                //Add previous node and extra node if sub_nodes was recently reset due to collision or initialization
-                if (sub_nodes.size() == 0)
-                {
-                    sub_nodes.push_back(paths[j].path[i - 1]);
-
-                    //Calculate extra node based on previous subsection's gradient, provided there are 2 previous nodes to compute the extra nodes
-                    if (i > 1 && prev_2_nodes.size() == 2)
-                    {
-                        GraphNode dir(prev_2_nodes[1] - prev_2_nodes[0]);
-                        dir.setUnitVector();
-
-                        //Extra point is collinear with prev[0] and prev[1], but further along than p[1]
-                        sub_nodes.push_back(prev_2_nodes[1] + dir * extra_point_distance * map_ptr->resolution);
-
-                        //Do not insert if collision occurs when extra point is added
-                        if (edgeCollides(sub_nodes[sub_nodes.size() - 2], sub_nodes.back(), collision_threshold))
-                            sub_nodes.pop_back();
-
-                        prev_2_nodes.clear();
-                    }
-                }
-
-                //If this node to the first node does not collide
-                if (!edgeCollides(sub_nodes[0], paths[j].path[i], collision_threshold) && sub_nodes.size() < bezier_max_n)
-                    sub_nodes.push_back(paths[j].path[i]);
-
-                //Collision happened or limit reached, find sub path with current sub nodes
-                else
-                {
-                    //Retrace back i value to prevent skipping a node
-                    --i;
-
-                    //Calculate the bezier subsection
-                    std::vector<GraphNode> temp_bezier = bezierSubsection(sub_nodes);
-                    bezier_path.insert(bezier_path.end(), temp_bezier.begin(), temp_bezier.end());
-
-                    if (sub_nodes.size() > 1)
-                        prev_2_nodes.insert(prev_2_nodes.begin(), sub_nodes.end() - 2, sub_nodes.end());
-
-                    sub_nodes.clear();
-                }
-            }
-
-            //If no collision before the end, find sub path as well
-            if (sub_nodes.size() != 0)
-            {
-                std::vector<GraphNode> temp_bezier = bezierSubsection(sub_nodes);
-                bezier_path.insert(bezier_path.end(), temp_bezier.begin(), temp_bezier.end());
-                sub_nodes.clear();
-            }
-        }
-
-        return !had_failure;
-    }
-
-    bool voronoi_path::interpolatePaths(std::vector<Path> &paths)
+    bool voronoi_path::interpolatePaths(std::vector<Path> &paths, double path_waypoint_sep)
     {
         //Calculate minimum distance between two poses in path should have, distance in pix squared
         double waypoint_sep_sq = path_waypoint_sep * path_waypoint_sep / (map_ptr->resolution * map_ptr->resolution);
@@ -1762,7 +1463,7 @@ namespace voronoi_path
         if (cum_dist >= lonely_branch_dist_threshold / map_ptr->resolution / map_ptr->resolution)
             return false;
 
-        //Reached branch node, or another lonely node. This means that this series of edges is disconnected from main graph
+        //Reached branch node
         if (ori_adj_list[curr_node].size() >= 3)
         {
             //Delete the previous node from curr_node's adjacency list
@@ -1774,22 +1475,23 @@ namespace voronoi_path
 
         //Traverse all nodes connected to the current one
         for (int i = 0; i < adj_list[curr_node].size(); ++i)
-        {
-            //Skip traversing where we came from
-            if (adj_list[curr_node][i] == prev_node)
-                continue;
-
-            //Get distance from curr_node to next node
-            double temp_dist = pow(node_inf[adj_list[curr_node][i]].x - node_inf[curr_node].x, 2) +
-                               pow(node_inf[adj_list[curr_node][i]].y - node_inf[curr_node].y, 2);
-
-            //If branch node was found before reaching distance limit, then remove all adjacencies of curr_node, this branch is dead
-            if (removeExcessBranch(ori_adj_list, adj_list[curr_node][i], curr_node, temp_dist + cum_dist))
+            for (const auto &connected_node : adj_list[curr_node])
             {
-                adj_list[curr_node].clear();
-                return true;
+                //Skip traversing where we came from
+                if (connected_node == prev_node)
+                    continue;
+
+                //Get distance from curr_node to next node
+                double temp_dist = pow(node_inf[connected_node].x - node_inf[curr_node].x, 2) +
+                                   pow(node_inf[connected_node].y - node_inf[curr_node].y, 2);
+
+                //If branch node was found before reaching distance limit, then remove all adjacencies of curr_node, this branch is dead
+                if (removeExcessBranch(ori_adj_list, connected_node, curr_node, temp_dist + cum_dist))
+                {
+                    adj_list[curr_node].clear();
+                    return true;
+                }
             }
-        }
 
         //Should not reach here
         return false;
