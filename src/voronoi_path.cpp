@@ -252,6 +252,7 @@ namespace voronoi_path
 
     bool voronoi_path::edgesToAdjacency(const std::vector<const jcv_edge *> &edge_vector)
     {
+        Profiler profiler;
         //Reset all variables
         adj_list.clear();
         node_inf.clear();
@@ -290,6 +291,7 @@ namespace voronoi_path
                 adj_list[node_index[1]].push_back(node_index[0]);
             }
         }
+        profiler.print("edgesToAdjacency hashing");
 
         //Connect single edges to nearby node if <= node_connection_threshold_pix pixel distance
         int threshold = pow(node_connection_threshold_pix, 2);
@@ -317,12 +319,13 @@ namespace voronoi_path
                     }
 
                     //If singly connected node is unable to connect to anything else
-                    if (j == node_inf.size() - 1)
-                        removeExcessBranch(ori_adj_list, node_num);
+                    // if (j == node_inf.size() - 1)
+                    // removeExcessBranch(ori_adj_list, node_num);
                 }
             }
         }
 
+        profiler.print("edgesToAdjacency remove branch");
         num_nodes = adj_list.size();
         return true;
     }
@@ -488,35 +491,51 @@ namespace voronoi_path
                 if (j >= path.size())
                     break;
 
-                //Project points onto the straight line
-                //y = mx + c =====> c = y - mx
-                //(a)x + (1)y = c =====> a = -m
-                double c1 = path[connected_node].y - gradient * path[connected_node].x;
-                double c2 = path[j].y - inv_gradient * path[j].x;
-                double a1 = -gradient;
-                double a2 = -inv_gradient;
-                double determinant = a1 - a2;
+                //Gradient is 0, shift point j's y coord to anchor_node's level
+                if (gradient == 0.0)
+                    path[j].y = path[anchor_node].y;
 
-                if (determinant != 0)
+                //Gradient infinity, shit point j's x coord to anchor_node's level
+                else if (fabs(gradient) == std::numeric_limits<double>::infinity())
+                    path[j].x = path[anchor_node].x;
+
+                //Valid gradient, project as normal
+                else
                 {
-                    path[j].x = (c1 - c2) / determinant;
-                    path[j].y = (a1 * c2 - a2 * c1) / determinant;
+                    //Project points onto the straight line
+                    //y = mx + c =====> c = y - mx
+                    //(a)x + (1)y = c =====> a = -m
+                    double c1 = path[connected_node].y - gradient * path[connected_node].x;
+                    double c2 = path[j].y - inv_gradient * path[j].x;
+                    double a1 = -gradient;
+                    double a2 = -inv_gradient;
+                    double determinant = a1 - a2;
+
+                    if(determinant == 0.0)
+                        std::cout << "Point projection has 0 determinant\n";
+                        
+                    else
+                    {
+                        path[j].x = (c1 - c2) / determinant;
+                        path[j].y = (a1 * c2 - a2 * c1) / determinant;
+                    }
                 }
 
                 //If point is not on segment between anchor point and connected point, delete the point
                 double dist = pow(path[j].x - path[j - 1].x, 2) + pow(path[j].y - path[j - 1].y, 2);
-                if ((path[j].x - path[connected_node].x) * (path[j].x - path[anchor_node].x) >= 0.0 || dist < waypoint_sep_sq)
-                {
-                    //Decrement post deletion because the for loop will increment this again later
-                    j = std::distance(path.begin(), path.erase(path.begin() + j)) - 1;
 
-                    //Decrement connected_node, future_anchor_node, collision_node because a node before connected_node has been erased
-                    --connected_node;
-                    --collision_node;
-                    --future_anchor_node;
+                if (!liesInSquare(path[j], path[anchor_node], path[connected_node]) || (dist < waypoint_sep_sq))
+                    {
+                        //Decrement post deletion because the for loop will increment this again later
+                        j = std::distance(path.begin(), path.erase(path.begin() + j)) - 1;
 
-                    continue;
-                }
+                        //Decrement connected_node, future_anchor_node, collision_node because a node before connected_node has been erased
+                        --connected_node;
+                        --collision_node;
+                        --future_anchor_node;
+
+                        continue;
+                    }
 
                 // Also find the future anchor node, definition of future anchor node is the node that can be connected to collision node, without collision
                 // If currently modified node has no collision with collision node, then it is the future anchor, break once set
@@ -585,7 +604,7 @@ namespace voronoi_path
 
             if (print_timings)
                 section_profiler.print("getPath interpolate and contract");
-                
+
             //Only set previous paths and their costs if this was the first getPath call
             if (!hasPreviousPaths())
             {
@@ -921,7 +940,7 @@ namespace voronoi_path
                 std::copy(kthPaths[k - 1].begin(), kthPaths[k - 1].begin() + i + 1, rootPath.begin());
 
                 //Disconnect edges if root path has already been discovered before
-                for (const auto & prevKthPath : kthPaths)
+                for (const auto &prevKthPath : kthPaths)
                 {
                     int equal_count = 0;
                     for (int z = 0; z <= i; ++z)
@@ -1002,7 +1021,7 @@ namespace voronoi_path
                         int kth_equal = 0;
                         int pot_equal = 0;
 
-                        for (const auto & node_pot : total_path)
+                        for (const auto &node_pot : total_path)
                         {
                             //Compare with kthPaths
                             if (check_path < kthPaths.size())
@@ -1040,7 +1059,7 @@ namespace voronoi_path
                 }
 
                 //Reset adj_list before changing spur node
-                for (const auto & modified_node : adj_list_modified_ind)
+                for (const auto &modified_node : adj_list_modified_ind)
                     adj_list[modified_node] = adj_list_backup[modified_node];
 
                 adj_list_modified_ind.clear();
@@ -1367,7 +1386,7 @@ namespace voronoi_path
         double increment_y = (end.y - start.y) / (double)steps;
         GraphNode curr_node = start;
 
-        for(int i = 0; i <= steps; ++i)
+        for (int i = 0; i <= steps; ++i)
         {
             int pixel = floor(curr_node.x) + floor(curr_node.y) * map_ptr->width;
             curr_node.x += increment_x;
@@ -1457,7 +1476,7 @@ namespace voronoi_path
         return std::abs(complex_1 - complex_2) / std::abs(complex_1) > h_class_threshold;
     }
 
-    bool voronoi_path::removeExcessBranch(std::vector<std::vector<int>> &ori_adj_list, int curr_node, int prev_node, double cum_dist)
+    bool voronoi_path::removeExcessBranch(const std::vector<std::vector<int>> &ori_adj_list, int curr_node, int prev_node, double cum_dist)
     {
         //Branch is too long, break premptively
         if (cum_dist >= lonely_branch_dist_threshold / map_ptr->resolution / map_ptr->resolution)
@@ -1495,5 +1514,12 @@ namespace voronoi_path
 
         //Should not reach here
         return false;
+    }
+
+
+    bool voronoi_path::liesInSquare(const GraphNode & point, const GraphNode & line_point_a, const GraphNode & line_point_b)
+    {
+        //Checks if the point lies in a square form
+        return (point.x - line_point_a.x) * (point.x - line_point_b.x) < 0.0 && (point.y - line_point_a.y) * (point.y - line_point_b.y) < 0.0;
     }
 } // namespace voronoi_path

@@ -574,7 +574,7 @@ namespace voronoi_path
          * @param cum_dist initialize with 0
          * @return bool indicating whether or not to prune this branch. Used in backtracking, and for notification only. No manual deletion needed
          **/
-        bool removeExcessBranch(std::vector<std::vector<int>> &ori_adj_list, int curr_node, int prev_node = -1, double cum_dist = 0);        
+        bool removeExcessBranch(const std::vector<std::vector<int>> &ori_adj_list, int curr_node, int prev_node = -1, double cum_dist = 0);        
 
         /**
          * Convert voronoi edges into an adjacency list used for path finding
@@ -582,6 +582,15 @@ namespace voronoi_path
          * @return boolean indication success
          **/
         bool edgesToAdjacency(const std::vector<const jcv_edge*>& edge_vector);
+
+        /**
+         * Check if a point lies in a square formed by points on 2 opposite vertices
+         * @param point point to check
+         * @param line_point_a first point of the line
+         * @param line_point_b second point of the line, order of points do not matter
+         * @return boolean indicating whether the point lies on the line
+         **/
+        bool liesInSquare(const GraphNode & point, const GraphNode & line_point_a, const GraphNode & line_point_b);
     };
 
 } // namespace voronoi_path
