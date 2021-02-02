@@ -100,7 +100,7 @@ Among the list of paths to be considered, the path that is physically shorter wi
 
 `sorted_nodes_dist_thresh:` This threshold determines how often the sorted nodes list topic is published. When the robot's current position is this threshold away from the previous time that sorted nodes was published, then sorted nodes will be updated and republished again. Units (m)
 
-`lonely_branch_dist_threshold:` Meters squared threshold to traverse a lone branch before halting. If the threshold is not reached before reaching a branching node, then the entire lone branch will be deleted. Set to 0 to disable lone branch pruning.
+`lonely_branch_dist_threshold:` Threshold distance to traverse a lone branch before halting. If the threshold is not reached before reaching a branching node, then the entire lone branch will be deleted. Set to 0 to disable lone branch pruning. Units (m)
 
 `path_waypoint_sep:` Minimum distance between waypoints of global path, if 2 waypoints are closer than this separation, they will be deleted. This parameter does not guarantee that waypoints on paths generated are uniformly separated based on this value. Increasing this separation reduces replanning time. Units(m)
 

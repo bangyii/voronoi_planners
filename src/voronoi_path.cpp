@@ -252,7 +252,6 @@ namespace voronoi_path
 
     bool voronoi_path::edgesToAdjacency(const std::vector<const jcv_edge *> &edge_vector)
     {
-        Profiler profiler;
         //Reset all variables
         adj_list.clear();
         node_inf.clear();
@@ -291,13 +290,10 @@ namespace voronoi_path
                 adj_list[node_index[1]].push_back(node_index[0]);
             }
         }
-        profiler.print("edgesToAdjacency hashing");
 
         //Connect single edges to nearby node if <= node_connection_threshold_pix pixel distance
+        std::vector<int> unconnected_nodes;
         int threshold = pow(node_connection_threshold_pix, 2);
-
-        //Duplicate adj_list for use in removing excess branches
-        auto ori_adj_list = adj_list;
         for (int node_num = 0; node_num < adj_list.size(); ++node_num)
         {
             //Singly connected node
@@ -306,7 +302,7 @@ namespace voronoi_path
                 //Check through all node_inf to see if there are any within distance threshold
                 for (int j = 0; j < node_inf.size(); ++j)
                 {
-                    //If the node being checked is i or is already connected to i, adj_list[i] only has 1 element
+                    //If the node being checked is itself or is already connected to the checked node, new_adj_list[i] only has 1 element
                     if (j == node_num || adj_list[node_num].back() == j)
                         continue;
 
@@ -318,14 +314,20 @@ namespace voronoi_path
                         break;
                     }
 
-                    //If singly connected node is unable to connect to anything else
-                    // if (j == node_inf.size() - 1)
-                    // removeExcessBranch(ori_adj_list, node_num);
+                    //Remember nodes that were unconnected to trim later
+                    if(j == node_inf.size() - 1)
+                        unconnected_nodes.push_back(node_num);
                 }
             }
         }
 
-        profiler.print("edgesToAdjacency remove branch");
+        //Loop through all nodes that were unable to be connected for trimming
+        auto new_adj_list = adj_list;
+        double thresh = sqrt(lonely_branch_dist_threshold) / map_ptr->resolution;
+        for(const auto &node_num : unconnected_nodes)
+            removeExcessBranch(new_adj_list, thresh, node_num);
+
+        adj_list = std::move(new_adj_list);
         num_nodes = adj_list.size();
         return true;
     }
@@ -421,7 +423,7 @@ namespace voronoi_path
 
     uint32_t voronoi_path::hash(const double &x, const double &y)
     {
-        uint32_t hashed_int = std::hash<uint32_t>{}(static_cast<uint32_t>((static_cast<uint16_t>(x) << 16) ^ static_cast<uint16_t>(y)));
+        uint32_t hashed_int = static_cast<uint32_t>((static_cast<uint16_t>(x) << 16) ^ static_cast<uint16_t>(y));
         return hashed_int;
     }
 
@@ -446,6 +448,9 @@ namespace voronoi_path
         //Anchor node that should be used for the next iteration
         int future_anchor_node = 0;
 
+        //Used to store previous collision node for use during finding of next collision node
+        int prev_collision_node = -1;
+
         //While anchor node has not reached the last node
         while (anchor_node < path.size() - 1)
         {
@@ -458,7 +463,7 @@ namespace voronoi_path
 
             //Index of node that collides with the anchor node
             int collision_node = path.size() - 1;
-            for (i = anchor_node + 1; i < path.size(); ++i)
+            for (i = prev_collision_node != -1 ? prev_collision_node : anchor_node; i < path.size(); ++i)
             {
                 //If collision with node i occurs, then set the connected point as the node before i
                 if (edgeCollides(path[anchor_node], path[i], trimming_collision_threshold))
@@ -513,7 +518,7 @@ namespace voronoi_path
 
                     if(determinant == 0.0)
                         std::cout << "Point projection has 0 determinant\n";
-                        
+
                     else
                     {
                         path[j].x = (c1 - c2) / determinant;
@@ -523,7 +528,6 @@ namespace voronoi_path
 
                 //If point is not on segment between anchor point and connected point, delete the point
                 double dist = pow(path[j].x - path[j - 1].x, 2) + pow(path[j].y - path[j - 1].y, 2);
-
                 if (!liesInSquare(path[j], path[anchor_node], path[connected_node]) || (dist < waypoint_sep_sq))
                     {
                         //Decrement post deletion because the for loop will increment this again later
@@ -546,6 +550,7 @@ namespace voronoi_path
                 }
             }
 
+            prev_collision_node = collision_node;
             anchor_node = future_anchor_node;
         }
 
@@ -1476,41 +1481,42 @@ namespace voronoi_path
         return std::abs(complex_1 - complex_2) / std::abs(complex_1) > h_class_threshold;
     }
 
-    bool voronoi_path::removeExcessBranch(const std::vector<std::vector<int>> &ori_adj_list, int curr_node, int prev_node, double cum_dist)
+    bool voronoi_path::removeExcessBranch(std::vector<std::vector<int>> &new_adj_list, double thresh, int curr_node, int prev_node, double cum_dist)
     {
         //Branch is too long, break premptively
-        if (cum_dist >= lonely_branch_dist_threshold / map_ptr->resolution / map_ptr->resolution)
+        if (cum_dist >= thresh)
             return false;
 
-        //Reached branch node
-        if (ori_adj_list[curr_node].size() >= 3)
+        //Reached branch node, check with reference with original unmodified adj_list to prevent excessive pruning esp at corridors
+        if (adj_list[curr_node].size() >= 3)
         {
             //Delete the previous node from curr_node's adjacency list
-            auto it = std::find(adj_list[curr_node].begin(), adj_list[curr_node].end(), prev_node);
-            if (it != adj_list[curr_node].end())
-                adj_list[curr_node].erase(it);
+            auto it = std::find(new_adj_list[curr_node].begin(), new_adj_list[curr_node].end(), prev_node);
+            if (it != new_adj_list[curr_node].end())
+                new_adj_list[curr_node].erase(it);
+
+            //Return true indicating branch has been reached
             return true;
         }
 
         //Traverse all nodes connected to the current one
-        for (int i = 0; i < adj_list[curr_node].size(); ++i)
-            for (const auto &connected_node : adj_list[curr_node])
+        for (const auto &connected_node : new_adj_list[curr_node])
+        {
+            //Skip traversing where we came from
+            if (connected_node == prev_node)
+                continue;
+
+            //Get distance from curr_node to next node
+            double dist = sqrt(pow(node_inf[connected_node].x - node_inf[curr_node].x, 2) +
+                                pow(node_inf[connected_node].y - node_inf[curr_node].y, 2));
+
+            //If branch node was found before reaching distance limit, then remove all adjacencies of curr_node, this branch is dead
+            if (removeExcessBranch(new_adj_list, thresh, connected_node, curr_node, dist + cum_dist))
             {
-                //Skip traversing where we came from
-                if (connected_node == prev_node)
-                    continue;
-
-                //Get distance from curr_node to next node
-                double temp_dist = pow(node_inf[connected_node].x - node_inf[curr_node].x, 2) +
-                                   pow(node_inf[connected_node].y - node_inf[curr_node].y, 2);
-
-                //If branch node was found before reaching distance limit, then remove all adjacencies of curr_node, this branch is dead
-                if (removeExcessBranch(ori_adj_list, connected_node, curr_node, temp_dist + cum_dist))
-                {
-                    adj_list[curr_node].clear();
-                    return true;
-                }
+                new_adj_list[curr_node].clear();
+                return true;
             }
+        }
 
         //Should not reach here
         return false;

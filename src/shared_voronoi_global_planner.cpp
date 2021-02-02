@@ -623,9 +623,9 @@ namespace shared_voronoi_global_planner
         marker_lonely.ns = "Lonely Nodes";
         marker_lonely.type = 8;
         marker_lonely.action = 0;
-        marker_lonely.scale.x = 0.1;
-        marker_lonely.scale.y = 0.1;
-        marker_lonely.color.a = 1.0;
+        marker_lonely.scale.x = 0.05;
+        marker_lonely.scale.y = 0.05;
+        marker_lonely.color.a = 0.7;
         marker_lonely.color.r = 1.0;
         marker_lonely.pose.orientation.w = 1.0;
         marker_lonely.points.reserve(lonely_nodes.size());
