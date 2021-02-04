@@ -569,8 +569,11 @@ namespace shared_voronoi_global_planner
 
     void SharedVoronoiGlobalPlanner::preferredPathCB(const std_msgs::UInt32::ConstPtr &msg)
     {
-        preferred_path = msg->data;
-        ROS_INFO("Shared Voronoi preferred path changed to %d through topic", preferred_path);
+        if(msg->data != preferred_path)
+        {
+            preferred_path = msg->data;
+            ROS_INFO("Shared Voronoi preferred path changed to %d through topic", preferred_path);
+        }
     }
 
     bool SharedVoronoiGlobalPlanner::joystickExceedsThreshold(const geometry_msgs::Twist &cmd_vel, const double max_lin_command,

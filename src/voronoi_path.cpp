@@ -468,6 +468,10 @@ namespace voronoi_path
                 //If collision with node i occurs, then set the connected point as the node before i
                 if (edgeCollides(path[anchor_node], path[i], trimming_collision_threshold))
                 {
+                    //For some reason a node on path collides with itself, path might be fault, return
+                    if(anchor_node == i)
+                        return false;
+                        
                     collision_node = i;
                     connected_node = i - 1;
                     break;
