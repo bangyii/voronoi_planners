@@ -183,17 +183,17 @@ namespace shared_voronoi_global_planner
             voronoi_path.clearPreviousPaths();
             preferred_path = 0;
             all_paths = voronoi_path.getPath(start_point, end_point, num_paths);
+            prev_goal = end_point;
         }
-
-        //Interpolate path to get even separation between waypoints
-        voronoi_path.interpolatePaths(all_paths, path_waypoint_sep);
 
         if (all_paths.size() < num_paths)
             ROS_WARN("Could not find all requested paths. Requested: %d, found: %ld", num_paths, all_paths.size());
 
-        //If paths are found
-        if (!all_paths.empty())
+        //If paths are found and plan is not filled yet
+        if (!all_paths.empty() && plan.empty())
         {
+            //Interpolate path to get even separation between waypoints
+            voronoi_path.interpolatePaths(all_paths, path_waypoint_sep);
             all_paths_meters.clear();
             all_paths_meters.resize(all_paths.size());
             visualization_msgs::MarkerArray marker_array;
@@ -237,7 +237,7 @@ namespace shared_voronoi_global_planner
                     }
                 }
 
-                //Loop through all the nodes for path i
+                //Loop through all the nodes for path i to convert to meters and generate visualization markers if enabled
                 for (const auto &pose : all_paths[i].path)
                 {
                     geometry_msgs::PoseStamped new_pose;
@@ -280,27 +280,6 @@ namespace shared_voronoi_global_planner
             if (publish_all_path_markers)
                 all_paths_pub.publish(marker_array);
 
-            //Select the path most similar to user commanded velocity path if joystick input magnitude fits inside an ellipse of at least 80% size of full joystick range's ellipse
-            double dist = pow(start_.pose.position.x - goal_.pose.position.x, 2) + pow(start_.pose.position.y - goal_.pose.position.y, 2);
-            if (joystickExceedsThreshold(cmd_vel, joy_max_lin, joy_max_ang, joy_input_thresh) && dist > pow(near_goal_threshold, 2))
-            {
-                int old_preferred_path = preferred_path;
-                preferred_path = getMatchedPath(start_, all_paths_meters);
-                if (old_preferred_path != preferred_path)
-                    ROS_INFO("Shared Voronoi preferred path changed to %d through joystick", preferred_path);
-            }
-
-            //Set selected plan
-            if (all_paths_meters.size() > preferred_path)
-                plan = all_paths_meters[preferred_path];
-
-            //Publish selected plan for visualization
-            nav_msgs::Path global_path;
-            global_path.header.stamp = ros::Time::now();
-            global_path.header.frame_id = map.frame_id;
-            global_path.poses = plan;
-            global_path_pub.publish(global_path);
-
             //Publish all generated paths
             shared_voronoi_global_planner::PathList path_list;
             for (int i = 0; i < all_paths_meters.size(); ++i)
@@ -314,7 +293,31 @@ namespace shared_voronoi_global_planner
             }
             all_paths_ind_pub.publish(path_list);
 
-            prev_goal = end_point;
+            //Select the path most similar to user commanded velocity path if joystick input magnitude fits inside an ellipse of at least 80% size of full joystick range's ellipse
+            double dist = pow(start_.pose.position.x - goal_.pose.position.x, 2) + pow(start_.pose.position.y - goal_.pose.position.y, 2);
+            if (joystickExceedsThreshold(cmd_vel, joy_max_lin, joy_max_ang, joy_input_thresh) && dist > pow(near_goal_threshold, 2))
+            {
+                int old_preferred_path = preferred_path;
+                preferred_path = getMatchedPath(start_, all_paths_meters);
+                if (old_preferred_path != preferred_path)
+                    ROS_INFO("Shared Voronoi preferred path changed to %d through joystick", preferred_path);
+            }
+
+            //Set selected plan
+            if (all_paths_meters.size() > preferred_path)
+                plan = all_paths_meters[preferred_path];
+        }
+
+        // Publish plan and all generated paths if a plan is selected. If no plan is selected, means there's error, return false
+        if(!plan.empty())
+        {
+            //Publish selected plan for visualization
+            nav_msgs::Path global_path;
+            global_path.header.stamp = ros::Time::now();
+            global_path.header.frame_id = map.frame_id;
+            global_path.poses = plan;
+            global_path_pub.publish(global_path);
+
             return true;
         }
 
