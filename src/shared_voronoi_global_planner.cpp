@@ -163,7 +163,7 @@ namespace shared_voronoi_global_planner
         voronoi_path::GraphNode start_point((start_.pose.position.x - map.origin.position.x) / map.resolution,
                                             (start_.pose.position.y - map.origin.position.y) / map.resolution);
 
-        //Send previous time steps' paths when too near to goal if there already paths found
+        //Send previous time steps' paths when too near to goal if there are already paths found
         double dist = sqrt(pow(start_.pose.position.x - goal_.pose.position.x, 2) + pow(start_.pose.position.y - goal_.pose.position.y, 2));
         if (dist < xy_goal_tolerance && all_paths_meters.size() > preferred_path)
         {
@@ -308,7 +308,7 @@ namespace shared_voronoi_global_planner
                 plan = all_paths_meters[preferred_path];
         }
 
-        // Publish plan and all generated paths if a plan is selected. If no plan is selected, means there's error, return false
+        // Publish plan. If no plan is selected, means there's error, return false
         if(!plan.empty())
         {
             //Publish selected plan for visualization
