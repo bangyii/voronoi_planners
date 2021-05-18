@@ -23,12 +23,12 @@ PLUGINLIB_EXPORT_CLASS(shared_voronoi_global_planner::SharedVoronoiGlobalPlanner
 namespace shared_voronoi_global_planner
 {
     SharedVoronoiGlobalPlanner::SharedVoronoiGlobalPlanner()
-        : nh("~" + std::string("SharedVoronoiGlobalPlanner")), tf_listener(tf_buffer)
+        : nh("~" + std::string("SharedVoronoiGlobalPlanner")), tf_listener(tf_buffer), nh_private("~")
     {
     }
 
     SharedVoronoiGlobalPlanner::SharedVoronoiGlobalPlanner(std::string name, costmap_2d::Costmap2DROS *costmap_ros)
-        : nh("~" + std::string("SharedVoronoiGlobalPlanner")), tf_listener(tf_buffer)
+        : nh("~" + std::string("SharedVoronoiGlobalPlanner")), tf_listener(tf_buffer), nh_private("~")
     {
     }
 
@@ -37,7 +37,7 @@ namespace shared_voronoi_global_planner
         if (update_voronoi_rate == 0)
         {
             ros::Rate r(1);
-            while (map.data.empty())
+            while (map.data.empty() && ros::ok())
             {
                 ROS_WARN("Map is still empty, unable to initialize, waiting until map is not empty");
                 r.sleep();
@@ -87,13 +87,13 @@ namespace shared_voronoi_global_planner
             readParams();
 
             //Subscribe and advertise related topics
-            global_costmap_sub = nh.subscribe("/move_base/global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);
+            global_costmap_sub = nh_private.subscribe("global_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::globalCostmapCB, this);
 
             if (!static_global_map)
-                global_update_sub = nh.subscribe("/move_base/global_costmap/costmap_updates", 1, &SharedVoronoiGlobalPlanner::globalCostmapUpdateCB, this);
+                global_update_sub = nh_private.subscribe("global_costmap/costmap_updates", 1, &SharedVoronoiGlobalPlanner::globalCostmapUpdateCB, this);
 
             if (subscribe_local_costmap)
-                local_costmap_sub = nh.subscribe("/move_base/local_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::localCostmapCB, this);
+                local_costmap_sub = nh_private.subscribe("local_costmap/costmap", 1, &SharedVoronoiGlobalPlanner::localCostmapCB, this);
 
             //Subscribe to joystick output to get direction selected by user
             user_vel_sub = nh.subscribe(joystick_topic, 1, &SharedVoronoiGlobalPlanner::cmdVelCB, this);
@@ -103,6 +103,9 @@ namespace shared_voronoi_global_planner
 
             //Subscribe to preferred path from belief update
             preferred_path_sub = nh.subscribe("preferred_path_ind", 1, &SharedVoronoiGlobalPlanner::preferredPathCB, this);
+
+            //Subscribe to move_base cancel if published
+            move_base_cancel_sub = nh.subscribe("/move_base/cancel", 1, &SharedVoronoiGlobalPlanner::cancelCB, this);
 
             //Visualization topics
             all_paths_pub = nh.advertise<visualization_msgs::MarkerArray>("all_paths_viz", 1);
@@ -577,6 +580,11 @@ namespace shared_voronoi_global_planner
             preferred_path = msg->data;
             ROS_INFO("Shared Voronoi preferred path changed to %d through topic", preferred_path);
         }
+    }
+
+    void SharedVoronoiGlobalPlanner::cancelCB(const actionlib_msgs::GoalIDConstPtr &msg)
+    {
+        voronoi_path.clearPreviousPaths();
     }
 
     bool SharedVoronoiGlobalPlanner::joystickExceedsThreshold(const geometry_msgs::Twist &cmd_vel, const double max_lin_command,

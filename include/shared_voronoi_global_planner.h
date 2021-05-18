@@ -9,6 +9,7 @@
 #include <geometry_msgs/Twist.h>
 #include <tf2_ros/transform_listener.h>
 #include <std_msgs/UInt32.h>
+#include <actionlib_msgs/GoalID.h>
 
 #include "voronoi_path.h"
 
@@ -258,12 +259,13 @@ namespace shared_voronoi_global_planner
 
         //ROS variables
         ros::NodeHandle nh;
+        ros::NodeHandle nh_private;
         ros::Subscriber local_costmap_sub;
         ros::Subscriber global_costmap_sub;
         ros::Subscriber global_update_sub;
         ros::Subscriber user_vel_sub;
         ros::Subscriber odom_sub;
-        ros::Subscriber move_base_stat_sub;
+        ros::Subscriber move_base_cancel_sub;
         ros::Subscriber preferred_path_sub;
 
         ros::Publisher global_path_pub;
@@ -297,6 +299,11 @@ namespace shared_voronoi_global_planner
          * Callback for local costmap, if subscribed
          **/
         void localCostmapCB(const nav_msgs::OccupancyGrid::ConstPtr &msg);
+
+        /**
+         * Callback for move_base cancel, clear all previous paths if cancel was called
+         **/
+        void cancelCB(const actionlib_msgs::GoalIDConstPtr &msg);
 
         /**
          * Callback for global costmap
