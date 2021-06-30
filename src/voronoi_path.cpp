@@ -532,7 +532,26 @@ namespace voronoi_path
 
                 //If point is not on segment between anchor point and connected point, delete the point
                 double dist = pow(path[j].x - path[j - 1].x, 2) + pow(path[j].y - path[j - 1].y, 2);
-                if (!liesInSquare(path[j], path[anchor_node], path[connected_node]) || (dist < waypoint_sep_sq))
+
+                //Check if the prev point, current point, and next point form a vertex of angle greater than 160
+                bool path_stuck = false;
+                if(j - 1 >= 0 && j + 1 < path.size())
+                {
+                    auto v1 = path[j-1] - path[j];
+                    auto v2 = path[j+1] - path[j];
+                    double v1_mag = sqrt(pow(v1.x, 2) + pow(v1.y, 2));
+                    double v2_mag = sqrt(pow(v2.x, 2) + pow(v2.y, 2));
+                    double dot = v1.x * v2.x + v1.y * v2.y;
+                    double angle = acos(dot / (v1_mag * v2_mag));
+
+                    if(fabs(angle) > path_vertex_angle_threshold/180.0*M_PI)
+                    {
+                        path_stuck = true;
+                        std::cout << "[Shared Voronoi Planner] Vertex detected to be stuck, vertex will be removed\n";
+                    }
+                }
+
+                if (!liesInSquare(path[j], path[anchor_node], path[connected_node]) || (dist < waypoint_sep_sq) || path_stuck)
                     {
                         //Decrement post deletion because the for loop will increment this again later
                         j = std::distance(path.begin(), path.erase(path.begin() + j)) - 1;

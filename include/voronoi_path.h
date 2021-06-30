@@ -343,6 +343,11 @@ namespace voronoi_path
          **/
         double path_waypoint_sep = 0.2;
 
+        /**
+         * Degrees angle threshold before 3 points on path are considered stuck, causing center point to be removed
+         **/
+        double path_vertex_angle_threshold = 160;
+
     private:
         /**
          * Pointer to map from the ROS side of planner
