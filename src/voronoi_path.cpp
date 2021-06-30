@@ -544,7 +544,7 @@ namespace voronoi_path
                     double dot = v1.x * v2.x + v1.y * v2.y;
                     double angle = acos(dot / (v1_mag * v2_mag));
 
-                    if(fabs(angle) > path_vertex_angle_threshold/180.0*M_PI)
+                    if(fabs(angle) < path_vertex_angle_threshold/180.0*M_PI)
                     {
                         path_stuck = true;
                         std::cout << "[Shared Voronoi Planner] Vertex detected to be stuck, vertex will be removed\n";

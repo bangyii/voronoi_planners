@@ -346,7 +346,7 @@ namespace voronoi_path
         /**
          * Degrees angle threshold before 3 points on path are considered stuck, causing center point to be removed
          **/
-        double path_vertex_angle_threshold = 160;
+        double path_vertex_angle_threshold = 10;
 
     private:
         /**
