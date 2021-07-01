@@ -213,7 +213,7 @@ namespace shared_voronoi_global_planner
         /**
          * Degrees angle threshold before 3 points on path are considered stuck, causing center point to be removed
          **/
-        double path_vertex_angle_threshold = 160;
+        double path_vertex_angle_threshold = 10;
 
         /**
          * Parameter to set whether or not to subscribe to local costmap

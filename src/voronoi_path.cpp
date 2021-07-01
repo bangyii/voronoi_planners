@@ -533,7 +533,7 @@ namespace voronoi_path
                 //If point is not on segment between anchor point and connected point, delete the point
                 double dist = pow(path[j].x - path[j - 1].x, 2) + pow(path[j].y - path[j - 1].y, 2);
 
-                //Check if the prev point, current point, and next point form a vertex of angle greater than 160
+                //Check if the prev point, current point, and next point form a vertex with angle that exceeds threshold
                 bool path_stuck = false;
                 if(j - 1 >= 0 && j + 1 < path.size())
                 {
@@ -547,22 +547,23 @@ namespace voronoi_path
                     if(fabs(angle) < path_vertex_angle_threshold/180.0*M_PI)
                     {
                         path_stuck = true;
-                        std::cout << "[Shared Voronoi Planner] Vertex detected to be stuck, vertex will be removed\n";
+                        if((v1_mag != 0 && v2_mag != 0))
+                            std::cout << "[Shared Voronoi Planner] Vertex detected to be stuck, vertex will be removed, has angle: " << angle << "\n";
                     }
                 }
 
                 if (!liesInSquare(path[j], path[anchor_node], path[connected_node]) || (dist < waypoint_sep_sq) || path_stuck)
-                    {
-                        //Decrement post deletion because the for loop will increment this again later
-                        j = std::distance(path.begin(), path.erase(path.begin() + j)) - 1;
+                {
+                    //Decrement post deletion because the for loop will increment this again later
+                    j = std::distance(path.begin(), path.erase(path.begin() + j)) - 1;
 
-                        //Decrement connected_node, future_anchor_node, collision_node because a node before connected_node has been erased
-                        --connected_node;
-                        --collision_node;
-                        --future_anchor_node;
+                    //Decrement connected_node, future_anchor_node, collision_node because a node before connected_node has been erased
+                    --connected_node;
+                    --collision_node;
+                    --future_anchor_node;
 
-                        continue;
-                    }
+                    continue;
+                }
 
                 // Also find the future anchor node, definition of future anchor node is the node that can be connected to collision node, without collision
                 // If currently modified node has no collision with collision node, then it is the future anchor, break once set
