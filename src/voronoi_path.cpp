@@ -484,20 +484,26 @@ namespace voronoi_path
                 vector_angles[3-j] = acos(vec.x / vec_mag);
             }
 
-            //If 3 vectors are too long, skip this check. Stuck sections of path are usually short
-            if(total_mag * map_ptr->resolution > path_vertex_dist_threshold)
-                continue;
+            // //If 3 vectors are too long, skip this check. Stuck sections of path are usually short
+            // if(total_mag * map_ptr->resolution > path_vertex_dist_threshold)
+            //     continue;
 
             //Get angle rotated
             double angle_rotated = 0;
             for(int j = 0; j < vector_angles.size() - 1; ++j)
                 angle_rotated += vector_angles[j] - vector_angles[j + 1];
             
-            if(fabs(fabs(angle_rotated) - M_PI) < path_vertex_angle_threshold/180.0 *  M_PI)
+
+            double threshold_rad = path_vertex_angle_threshold / 180.0 * M_PI;
+            // if(fabs(fabs(angle_rotated) - M_PI) < path_vertex_angle_threshold/180.0 *  M_PI)
+            if(fabs(angle_rotated) > M_PI - threshold_rad && fabs(angle_rotated) < M_PI + threshold_rad)
             {
-                //Delete middle 2 vertices, i - 2 & i - 1
-                std::cout << "Vertices removed from path, points likely to be stuck. Angle rotated: " << angle_rotated << "\n";
-                i = std::distance(path.begin(), path.erase(path.begin() + i - 2, path.begin() + i)) - 1;
+                //Delete middle 2 vertices, i - 2 & i - 1, if the first and last vertices do not collide with obstacle
+                if(!edgeCollides(path[i], path[i-3], collision_threshold))
+                {
+                    std::cout << "Vertices removed from path, points likely to be stuck. Angle rotated: " << angle_rotated << "\n";
+                    i = std::distance(path.begin(), path.erase(path.begin() + i - 2, path.begin() + i)) - 1;
+                }
             }
         }
     }
