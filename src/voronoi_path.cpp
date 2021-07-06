@@ -432,9 +432,74 @@ namespace voronoi_path
         //Increase resolution of paths by interpolation before contracting to give smoother result
         interpolatePaths(paths, path_waypoint_sep);
         for (auto &path : paths)
+        {
             contractPath(path.path);
+            findStuckVertex(path.path);
+        }
 
         return true;
+    }
+
+    bool voronoi_path::findStuckVertex(std::vector<GraphNode> &path)
+    {
+        // for(int j = 1; j < path.size() - 1; ++j)
+        // {
+        //     //Check if the prev point, current point, and next point form a vertex with angle that exceeds threshold
+        //     if(j - 1 >= 0 && j + 1 < path.size())
+        //     {
+        //         auto v1 = path[j-1] - path[j];
+        //         auto v2 = path[j+1] - path[j];
+        //         double v1_mag = sqrt(pow(v1.x, 2) + pow(v1.y, 2));
+        //         double v2_mag = sqrt(pow(v2.x, 2) + pow(v2.y, 2));
+        //         double dot = v1.x * v2.x + v1.y * v2.y;
+        //         double angle = acos(dot / (v1_mag * v2_mag));
+        //         if(fabs(angle) < 65/180.0*M_PI)
+        //             std::cout << "Angle of " << j << " is " << angle << " v1 " << v1.x << ", " << v1.y << " v2 " << v2.x << ", " << v2.y << "\n";
+        //         if(fabs(angle) < path_vertex_angle_threshold/180.0*M_PI)
+        //         {
+        //             j = std::distance(path.begin(), path.erase(path.begin() + j)) - 1;
+        //             if(j > 1 && j < path.size())
+        //                 std::cout << "Removed point========================== " << j << "\n";
+        //         }
+                    
+        //     }
+        // }
+
+        //Calculate the cumulative angle turned by 3 consecutive vectors formed by 4 vertices
+        //i indicates the last vertex of the 3 vectors that is being evaluated
+        for(int i = 3; i < path.size(); ++i)
+        {
+            std::vector<double> vector_angles;
+            vector_angles.resize(3);
+
+            //j indicates the end vertex of current vector being evaluated
+            double total_mag = 0;
+            for(int j = 3; j > 0; --j)
+            {
+                auto vec = path[i - j + 1] - path[i - j];
+                double vec_mag = sqrt(pow(vec.x, 2) + pow(vec.y, 2));
+                total_mag += vec_mag;
+
+                //Get angle wrt x axis
+                vector_angles[3-j] = acos(vec.x / vec_mag);
+            }
+
+            //If 3 vectors are too long, skip this check. Stuck sections of path are usually short
+            if(total_mag * map_ptr->resolution > path_vertex_dist_threshold)
+                continue;
+
+            //Get angle rotated
+            double angle_rotated = 0;
+            for(int j = 0; j < vector_angles.size() - 1; ++j)
+                angle_rotated += vector_angles[j] - vector_angles[j + 1];
+            
+            if(fabs(fabs(angle_rotated) - M_PI) < path_vertex_angle_threshold/180.0 *  M_PI)
+            {
+                //Delete middle 2 vertices, i - 2 & i - 1
+                std::cout << "Vertices removed from path, points likely to be stuck. Angle rotated: " << angle_rotated << "\n";
+                i = std::distance(path.begin(), path.erase(path.begin() + i - 2, path.begin() + i)) - 1;
+            }
+        }
     }
 
     bool voronoi_path::contractPath(std::vector<GraphNode> &path)
@@ -533,26 +598,7 @@ namespace voronoi_path
                 //If point is not on segment between anchor point and connected point, delete the point
                 double dist = pow(path[j].x - path[j - 1].x, 2) + pow(path[j].y - path[j - 1].y, 2);
 
-                //Check if the prev point, current point, and next point form a vertex with angle that exceeds threshold
-                bool path_stuck = false;
-                if(j - 1 >= 0 && j + 1 < path.size())
-                {
-                    auto v1 = path[j-1] - path[j];
-                    auto v2 = path[j+1] - path[j];
-                    double v1_mag = sqrt(pow(v1.x, 2) + pow(v1.y, 2));
-                    double v2_mag = sqrt(pow(v2.x, 2) + pow(v2.y, 2));
-                    double dot = v1.x * v2.x + v1.y * v2.y;
-                    double angle = acos(dot / (v1_mag * v2_mag));
-
-                    if(fabs(angle) < path_vertex_angle_threshold/180.0*M_PI)
-                    {
-                        path_stuck = true;
-                        if((v1_mag != 0 && v2_mag != 0))
-                            std::cout << "[Shared Voronoi Planner] Vertex detected to be stuck, vertex will be removed, has angle: " << angle << "\n";
-                    }
-                }
-
-                if (!liesInSquare(path[j], path[anchor_node], path[connected_node]) || (dist < waypoint_sep_sq) || path_stuck)
+                if (!liesInSquare(path[j], path[anchor_node], path[connected_node]) || (dist < waypoint_sep_sq))
                 {
                     //Decrement post deletion because the for loop will increment this again later
                     j = std::distance(path.begin(), path.erase(path.begin() + j)) - 1;

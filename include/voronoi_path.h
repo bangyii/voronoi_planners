@@ -346,7 +346,8 @@ namespace voronoi_path
         /**
          * Degrees angle threshold before 3 points on path are considered stuck, causing center point to be removed
          **/
-        double path_vertex_angle_threshold = 10;
+        double path_vertex_angle_threshold = 25;
+        double path_vertex_dist_threshold = 0.8;
 
     private:
         /**
@@ -555,6 +556,14 @@ namespace voronoi_path
          * @return bool indicating success
          **/
         bool contractPath(std::vector<GraphNode> &path);
+
+        /**
+         * Find if any of the vertices are in concave area of costmap, causing the path to become stuck
+         * Remove the middle vertex if found
+         * @param path path to check for stuck vertex
+         * @return bool indicating success
+         **/
+        bool findStuckVertex(std::vector<GraphNode> &path);
 
         /** 
          * Interpolate paths before contraction to allow smoother result, uses the method above to achieve contraction

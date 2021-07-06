@@ -719,6 +719,7 @@ namespace shared_voronoi_global_planner
         nh.getParam("joy_input_thresh", joy_input_thresh);
         nh.getParam("publish_path_point_markers", publish_path_point_markers);
         nh.getParam("path_vertex_angle_threshold", path_vertex_angle_threshold);
+        nh.getParam("path_vertex_dist_threshold", path_vertex_dist_threshold);
 
         //Set parameters for voronoi path object
         voronoi_path.h_class_threshold = h_class_threshold;
@@ -733,5 +734,6 @@ namespace shared_voronoi_global_planner
         voronoi_path.lonely_branch_dist_threshold = lonely_branch_dist_threshold;
         voronoi_path.path_waypoint_sep = path_waypoint_sep;
         voronoi_path.path_vertex_angle_threshold = path_vertex_angle_threshold;
+        voronoi_path.path_vertex_dist_threshold = path_vertex_dist_threshold;
     }
 } // namespace shared_voronoi_global_planner
