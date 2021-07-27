@@ -677,7 +677,7 @@ namespace voronoi_path
          * @param paths paths to compute average headings
          * @return vector of pair <average_heading, path index in array>
          **/
-        std::vector<std::pair<double, int>> getPathHeadings(std::vector<Path> &paths);
+        std::vector<std::pair<double, int>> getPathHeadings(const std::vector<Path> &paths);
 
         /**
          * Template method to flip any vector pair. From vector<pair<A, B>> to vector<pair<B, A>>

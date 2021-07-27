@@ -18,6 +18,7 @@ path_waypoint_sep: 0.1
 publish_path_point_markers: false
 path_vertex_angle_threshold: 45
 path_vertex_dist_threshold: 0.8
-inflation_radius: 0.5;
-inflation_blur_radius: 0.125;
+inflation_radius: 0.5
+inflation_blur_radius: 0.125
 base_link_frame: base_link
+debug_path_id: false

@@ -773,8 +773,9 @@ namespace voronoi_path
             //Offset back to start position
             interp_connection.push_back(interp_vec + start);
 
-            //Check if last 2 nodes collide with an edge, if collide means the paths are distinct
-            if(interp_connection.size() > 1 && edgeCollides(interp_connection.back(), interp_connection[interp_connection.size() - 2], collision_threshold))
+            //Check if last 2 nodes collide with an edge, if collide means the paths are distinct. Collision threshold
+            //only includes solid obstacles and not inflation zone
+            if(interp_connection.size() > 1 && edgeCollides(interp_connection.back(), interp_connection[interp_connection.size() - 2], occupancy_threshold))
                 return true;
         }
 
@@ -796,7 +797,7 @@ namespace voronoi_path
             return false;
     }
 
-    std::vector<std::pair<double, int>> voronoi_path::getPathHeadings(std::vector<Path> &paths)
+    std::vector<std::pair<double, int>> voronoi_path::getPathHeadings(const std::vector<Path> &paths)
     {
         std::vector<std::pair<double, int>> average_headings_pair;
         for(int i = 0; i < paths.size(); ++i)
@@ -889,6 +890,7 @@ namespace voronoi_path
         interpolateContractPaths(all_path_nodes);
 
         std::vector<int> remove_ind;
+        auto prev_path_headings = getPathHeadings(previous_paths);
         do{
             //Clear from previous iteration
             remove_ind.clear();
@@ -934,16 +936,51 @@ namespace voronoi_path
                 //If headings greater than threshold, then distinct, otherwise check using interpolation and homotopy
                 if(fabs(heading_diff) < 30 && !isBacktrackDistinct(path1, path2))
                 {
-                    //Remove path that has endpoint nearer to robot position
-                    double dist1 = sqrt(pow(start.x - path1->path.back().x, 2) + pow(start.y - path1->path.back().y, 2));
-                    double dist2 = sqrt(pow(start.x - path2->path.back().x, 2) + pow(start.y - path2->path.back().y, 2));
+                    //Path removal should favor the path that has close relative in previous time step to prevent oscillation
+                    std::vector<Path> candidate_paths;
+                    candidate_paths.push_back(*path1);
+                    candidate_paths.push_back(*path2);
+                    auto candidate_path_headings = getPathHeadings(candidate_paths);
 
-                    //Erasing returns iterator of object AFTER erased object, -1 because for loop will increment again
-                    if(dist1 < dist2)
-                        remove_ind.push_back(std::distance(all_path_nodes.begin(), path1));
+                    std::vector<double> mins;
+                    mins.resize(candidate_path_headings.size());
+                    for(int p = 0; p < candidate_path_headings.size(); ++p)
+                    {
+                        double min = 1000000;
+                        for(int l = 0; l < prev_path_headings.size(); ++l)
+                        {
+                            double angle_diff = fabs(prev_path_headings[l].first - candidate_path_headings[p].first);
+                            if(angle_diff < min)
+                                min = angle_diff;
+                        }
+
+                        mins[p] = min;
+                    }
+
+                    //If both are greater than 45deg, use distance instead
+                    if(mins[0] < 45 || mins[1] < 45)
+                    {
+                        //Path 1 has a nearer relative, erase path 2
+                        if(mins[0] < mins[1])
+                            remove_ind.push_back(std::distance(all_path_nodes.begin(), path2));
+
+                        else
+                            remove_ind.push_back(std::distance(all_path_nodes.begin(), path1));
+                    }
 
                     else
-                        remove_ind.push_back(std::distance(all_path_nodes.begin(), path2));
+                    {
+                        //Remove path that has endpoint nearer to robot position
+                        double dist1 = sqrt(pow(start.x - path1->path.back().x, 2) + pow(start.y - path1->path.back().y, 2));
+                        double dist2 = sqrt(pow(start.x - path2->path.back().x, 2) + pow(start.y - path2->path.back().y, 2));
+
+                        //Erasing returns iterator of object AFTER erased object, -1 because for loop will increment again
+                        if(dist1 < dist2)
+                            remove_ind.push_back(std::distance(all_path_nodes.begin(), path1));
+
+                        else
+                            remove_ind.push_back(std::distance(all_path_nodes.begin(), path2));
+                    }
                 }
             }
 
@@ -1008,12 +1045,13 @@ namespace voronoi_path
             std::sort(prev_headings_copy.begin(), prev_headings_copy.end());
             
             //Compare starting from smallest absolute angle difference, increase likelihood of comparing with actual predecessor
+            bool distinct = true;
             for(int j = 0; j < prev_headings_copy.size(); ++j)
             {
                 auto prev_path = prev_paths.begin() + prev_headings_copy[j].second;
                 double heading_diff = prev_headings_copy[j].first;
 
-                if(fabs(heading_diff) < 20)
+                if(fabs(heading_diff) < 30)
                 {
                     //Check if prev_path collides with obstacles in this map frame
                     bool collides = false;
@@ -1032,20 +1070,22 @@ namespace voronoi_path
                     {
                         cur_path->id = prev_path->id;
                         prev_path->id = 0;
+                        distinct = false;
+                        
+                        //For visualization
+                        viz_paths[i].path.insert(viz_paths[i].path.end(), prev_path->path.rbegin(), prev_path->path.rend());
+
+                        //Only do 1 comparison per path
+                        //TODO: Robustify this
+                        break;
                     }
-
-                    else
-                        std::cout << "Path " << i << " is distinct\n";
-
-                    //For visualization
-                    viz_paths[i].path.insert(viz_paths[i].path.end(), prev_path->path.rbegin(), prev_path->path.rend());
-
-                    //Only do 1 comparison per path
-                    //TODO: Robustify this
-                    break;
                 }
             }
+
+            if(distinct)
+                std::cout << "Path " << i << " is distinct\n";
         }
+
         return viz_paths;
     }
 

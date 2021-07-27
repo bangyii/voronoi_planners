@@ -17,6 +17,7 @@ bool readParams(ros::NodeHandle &nh)
 {
 	//Read parameters
 	nh.getParam("occupancy_threshold", occupancy_threshold);
+	nh.getParam("debug_path_id", debug_path_id);
 	nh.getParam("planning_rate", planning_rate);
 	nh.getParam("print_timings", print_timings);
 	nh.getParam("line_check_resolution", line_check_resolution);
@@ -217,7 +218,15 @@ void makePlan(const ros::WallTimerEvent &e)
 	//DFS planning
 	all_paths = v_path.backtrackPlan(start_point);
 	if(publish_viz_paths)
+	{
 		all_paths = v_path.getVizPaths();
+	}
+
+	if(debug_path_id)
+	{
+		for(int i = 0; i < all_paths.size(); ++i)
+			std::cout << "Path " << i << " id " << all_paths[i].id << "\n";
+	}
 
 	//If paths are found
 	if (!all_paths.empty())

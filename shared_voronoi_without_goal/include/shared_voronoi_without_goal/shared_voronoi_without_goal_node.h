@@ -24,6 +24,7 @@ std::vector<voronoi_path::Path> all_paths;
 double occupancy_threshold = 99;
 double planning_rate = 10;
 bool print_timings = false;
+bool debug_path_id = false;
 double line_check_resolution = 0.1;
 double inflation_radius = 0.5;
 double inflation_blur_radius = 0.125;
