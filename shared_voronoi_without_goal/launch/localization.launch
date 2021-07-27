@@ -1,0 +1,7 @@
+<launch>
+
+  <node pkg="slam_toolbox" type="localization_slam_toolbox_node" name="slam_toolbox">
+    <rosparam command="load" file="$(find shared_voronoi_without_goal)/config/mapper_params_localization.yaml" />
+  </node>
+
+</launch>

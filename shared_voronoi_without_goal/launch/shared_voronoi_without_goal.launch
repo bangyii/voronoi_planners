@@ -1,0 +1,6 @@
+<launch>
+	<node name="shared_voronoi_without_goal" type="shared_voronoi_without_goal_node" pkg="shared_voronoi_without_goal">
+		<rosparam command="load" file="$(find shared_voronoi_without_goal)/config/params.yaml"/>
+	</node>
+	<include file="$(find shared_voronoi_without_goal)/launch/localization.launch"/>
+</launch>
