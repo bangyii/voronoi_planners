@@ -21,6 +21,7 @@ find_package(catkin REQUIRED COMPONENTS
   actionlib_msgs
   tf2_ros
   message_generation
+  shared_voronoi_without_goal
 )
 
 find_package(OpenCV 3 REQUIRED)
@@ -65,9 +66,6 @@ add_message_files(
   NodeInfo.msg
   AdjacencyList.msg
   NodeInfoList.msg
-  SortedNodeInfo.msg
-  SortedNodesList.msg
-  PathList.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -140,11 +138,11 @@ include
 )
 
 
-add_library(voronoi_path_planner
-  src/voronoi_path.cpp
-)
-add_dependencies(voronoi_path_planner ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(voronoi_path_planner ${OpenCV_LIBS})
+# add_library(voronoi_path_planner
+#   src/voronoi_path.cpp
+# )
+# add_dependencies(voronoi_path_planner ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+# target_link_libraries(voronoi_path_planner ${OpenCV_LIBS})
 
 ## Declare a C++ library
 add_library(${PROJECT_NAME}_lib
@@ -154,7 +152,7 @@ add_library(${PROJECT_NAME}_lib
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
 add_dependencies(${PROJECT_NAME}_lib ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_lib voronoi_path_planner ${catkin_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_lib ${catkin_LIBRARIES})
 
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
@@ -198,11 +196,11 @@ target_link_libraries(${PROJECT_NAME}_lib voronoi_path_planner ${catkin_LIBRARIE
 
 ## Mark libraries for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
-install(TARGETS voronoi_path_planner
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
-)
+# install(TARGETS voronoi_path_planner
+#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
+# )
 
 ## Mark cpp header files for installation
 install(DIRECTORY include/

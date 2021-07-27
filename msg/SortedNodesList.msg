@@ -1,1 +1,0 @@
-SortedNodeInfo[] sorted_nodes

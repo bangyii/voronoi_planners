@@ -11,7 +11,7 @@
 #include <std_msgs/UInt32.h>
 #include <actionlib_msgs/GoalID.h>
 
-#include "voronoi_path.h"
+#include <shared_voronoi_without_goal/voronoi_path.h>
 
 #include <chrono>
 
@@ -200,11 +200,6 @@ namespace shared_voronoi_global_planner
         std::string odom_topic = "/odom";
 
         /**
-         * Update sorted nodes list distance threshold. When robot is this distance away from the previous update position, then list will update again
-         **/
-        double sorted_nodes_dist_thresh = 0.3;
-
-        /**
          * Whether to publish markers to visualize the voronoi diagram's edges, lonely nodes in the voronoi diagram (singly connected),
          * and centroids of obstacles
          **/
@@ -250,11 +245,6 @@ namespace shared_voronoi_global_planner
          * Last position where sorted node list was computed
          **/
         nav_msgs::Odometry last_sorted_position;
-
-        /**
-         * Vector storing the sorted nodes list
-         **/
-        std::vector<std::pair<double, int>> sorted_nodes_raw;
         
         /**
          * Internal store of pixels that were modified during the last local costmap callback, used to restore the pixels in the following 
@@ -278,7 +268,6 @@ namespace shared_voronoi_global_planner
         ros::Publisher user_direction_pub;
         ros::Publisher edges_viz_pub;
         ros::Publisher adjacency_list_pub;
-        ros::Publisher sorted_nodes_pub;
         ros::Publisher node_info_pub;
         ros::Publisher all_paths_ind_pub;
 

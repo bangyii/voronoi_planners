@@ -14,9 +14,7 @@
 #include <shared_voronoi_global_planner/AdjacencyNodes.h>
 #include <shared_voronoi_global_planner/NodeInfo.h>
 #include <shared_voronoi_global_planner/NodeInfoList.h>
-#include <shared_voronoi_global_planner/SortedNodeInfo.h>
-#include <shared_voronoi_global_planner/SortedNodesList.h>
-#include <shared_voronoi_global_planner/PathList.h>
+#include <shared_voronoi_without_goal/PathList.h>
 
 PLUGINLIB_EXPORT_CLASS(shared_voronoi_global_planner::SharedVoronoiGlobalPlanner, nav_core::BaseGlobalPlanner)
 
@@ -116,8 +114,7 @@ namespace shared_voronoi_global_planner
             global_path_pub = nh.advertise<nav_msgs::Path>("plan", 1);
             adjacency_list_pub = nh.advertise<shared_voronoi_global_planner::AdjacencyList>("adjacency_list", 1, true);
             node_info_pub = nh.advertise<shared_voronoi_global_planner::NodeInfoList>("node_info", 1, true);
-            sorted_nodes_pub = nh.advertise<shared_voronoi_global_planner::SortedNodesList>("sorted_nodes", 1, true);
-            all_paths_ind_pub = nh.advertise<shared_voronoi_global_planner::PathList>("all_paths", 1);
+            all_paths_ind_pub = nh.advertise<shared_voronoi_without_goal::PathList>("all_paths", 1);
 
             //Create timer to update Voronoi diagram, use one shot timer if update rate is 0
             if (update_voronoi_rate != 0)
@@ -284,7 +281,7 @@ namespace shared_voronoi_global_planner
                 all_paths_pub.publish(marker_array);
 
             //Publish all generated paths
-            shared_voronoi_global_planner::PathList path_list;
+            shared_voronoi_without_goal::PathList path_list;
             for (int i = 0; i < all_paths_meters.size(); ++i)
             {
                 nav_msgs::Path temp_path;
@@ -548,29 +545,6 @@ namespace shared_voronoi_global_planner
         //last_sorted_position pose will be 0 if it was not initialized before
         double dist = pow(msg_.pose.pose.position.x - last_sorted_position.pose.pose.position.x, 2) +
                       pow(msg_.pose.pose.position.y - last_sorted_position.pose.pose.position.y, 2);
-
-        //Greater than threshold, time to update sorted nodes list
-        if (last_sorted_position.header.frame_id.empty() || dist > pow(sorted_nodes_dist_thresh, 2))
-        {
-            //Convert pose in map frame to costmap pixel image frame
-            sorted_nodes_raw = voronoi_path.getSortedNodeList(voronoi_path::GraphNode((msg_.pose.pose.position.x - map.origin.position.x) / map.resolution,
-                                                                                      (msg_.pose.pose.position.y - map.origin.position.y) / map.resolution));
-
-            if (!sorted_nodes_raw.empty())
-            {
-                last_sorted_position = msg_;
-
-                //Publish sorted vector of nodes that are nearby, distance is in square meters
-                shared_voronoi_global_planner::SortedNodesList sorted_nodes;
-                sorted_nodes.sorted_nodes.resize(sorted_nodes_raw.size());
-                for (int i = 0; i < sorted_nodes_raw.size(); ++i)
-                {
-                    sorted_nodes.sorted_nodes[i].node = sorted_nodes_raw[i].second;
-                    sorted_nodes.sorted_nodes[i].distance = sorted_nodes_raw[i].first * map.resolution * map.resolution;
-                }
-                sorted_nodes_pub.publish(sorted_nodes);
-            }
-        }
     }
 
     void SharedVoronoiGlobalPlanner::preferredPathCB(const std_msgs::UInt32::ConstPtr &msg)
@@ -713,7 +687,6 @@ namespace shared_voronoi_global_planner
         nh.getParam("static_global_map", static_global_map);
         nh.getParam("xy_goal_tolerance", xy_goal_tolerance);
         nh.getParam("odom_topic", odom_topic);
-        nh.getParam("sorted_nodes_dist_thresh", sorted_nodes_dist_thresh);
         nh.getParam("lonely_branch_dist_threshold", lonely_branch_dist_threshold);
         nh.getParam("path_waypoint_sep", path_waypoint_sep);
         nh.getParam("joy_input_thresh", joy_input_thresh);
