@@ -484,20 +484,29 @@ namespace voronoi_path
                 vector_angles[3-j] = acos(vec.x / vec_mag);
             }
 
-            //If 3 vectors are too long, skip this check. Stuck sections of path are usually short
-            if(total_mag * map_ptr->resolution > path_vertex_dist_threshold)
-                continue;
+            // //If 3 vectors are too long, skip this check. Stuck sections of path are usually short
+            // if(total_mag * map_ptr->resolution > path_vertex_dist_threshold)
+            //     continue;
 
             //Get angle rotated
             double angle_rotated = 0;
             for(int j = 0; j < vector_angles.size() - 1; ++j)
                 angle_rotated += vector_angles[j] - vector_angles[j + 1];
             
-            if(fabs(fabs(angle_rotated) - M_PI) < path_vertex_angle_threshold/180.0 *  M_PI)
+
+            double threshold_rad = path_vertex_angle_threshold / 180.0 * M_PI;
+            // if(fabs(fabs(angle_rotated) - M_PI) < path_vertex_angle_threshold/180.0 *  M_PI)
+            if(fabs(angle_rotated) > M_PI - threshold_rad && fabs(angle_rotated) < M_PI + threshold_rad)
             {
-                //Delete middle 2 vertices, i - 2 & i - 1
-                std::cout << "Vertices removed from path, points likely to be stuck. Angle rotated: " << angle_rotated << "\n";
-                i = std::distance(path.begin(), path.erase(path.begin() + i - 2, path.begin() + i)) - 1;
+                //Delete middle 2 vertices, i - 2 & i - 1, if the first and last vertices do not collide with obstacle
+                if(!edgeCollides(path[i], path[i-3], collision_threshold))
+                {
+                    std::cout << "Vertices removed from path, points likely to be stuck. Angle rotated: " << angle_rotated << "\n";
+                    i = std::distance(path.begin(), path.erase(path.begin() + i - 2, path.begin() + i)) - 1;
+                }
+
+                else
+                    std::cout << "Stuck vertex found but unable to remove due to collision\n";
             }
         }
     }
@@ -534,13 +543,30 @@ namespace voronoi_path
                 if (edgeCollides(path[anchor_node], path[i], trimming_collision_threshold))
                 {
                     //For some reason a node on path collides with itself, path might be fault, return
-                    if(anchor_node == i)
-                        return false;
+                    // if(anchor_node == i)
+                    // {
+                    //     //Remove self collision node
+                    //     i = std::distance(path.begin(), path.erase(path.begin() + i));
+                    //     std::cout << "Self collision waypoint detected, erasing node " << i << "\n";
+                    //     return false;
+                    // }
                         
                     collision_node = i;
                     connected_node = i - 1;
                     break;
                 }
+            }
+
+            if(collision_node == anchor_node)
+            {
+                if(anchor_node > 0)
+                    anchor_node--;
+                std::cout << "Self collision waypoint detected, erasing node " << collision_node << "\n";
+                path.erase(path.begin() + collision_node);
+                // path.erase(path.begin() + collision_node+1);
+                // path.erase(path.begin() + collision_node-1);
+                prev_collision_node = -1;
+                continue;
             }
 
             //Preemptively set future_anchor_node, if another is found later on, this will be corrected
@@ -1520,8 +1546,9 @@ namespace voronoi_path
                         interp_point.x = prev_point.x * (steps - j) / (double)steps + curr_point.x * (j) / (double)steps;
                         interp_point.y = prev_point.y * (steps - j) / (double)steps + curr_point.y * (j) / (double)steps;
 
-                        //.insert will make the nth element your new item
-                        path.path.insert(path.path.begin() + (insert_position++), interp_point);
+                        //Insert if no collision, .insert will make the nth element your new item
+                        if(!edgeCollides(interp_point, interp_point, collision_threshold))
+                            path.path.insert(path.path.begin() + (insert_position++), interp_point);
 
                         //Incrememnt i because a node has been inserted before i
                         ++i;
