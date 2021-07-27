@@ -53,12 +53,12 @@ namespace shared_voronoi_global_planner
         }
 
         //Call voronoi object to update its internal voronoi diagram
-        voronoi_path.mapToGraph(&map);
+        v_path.mapToGraph(&map);
         ROS_WARN("Voronoi diagram initialized");
 
         //Publish adjacency list and corresponding info to
-        std::vector<std::vector<int>> adj_list_raw = voronoi_path.getAdjList();
-        std::vector<voronoi_path::GraphNode> node_inf_raw = voronoi_path.getNodeInfo();
+        std::vector<std::vector<int>> adj_list_raw = v_path.getAdjList();
+        std::vector<voronoi_path::GraphNode> node_inf_raw = v_path.getNodeInfo();
         shared_voronoi_global_planner::AdjacencyList adj_list;
         shared_voronoi_global_planner::NodeInfoList node_info;
         adj_list.nodes.resize(adj_list_raw.size());
@@ -171,18 +171,18 @@ namespace shared_voronoi_global_planner
         }
 
         //move_base had a goal previously set, so paths should be trimmed based on previous one instead of replanning entirely
-        else if (voronoi_path.hasPreviousPaths() && prev_goal == end_point)
+        else if (v_path.hasPreviousPaths() && prev_goal == end_point)
         {
-            all_paths = voronoi_path.replan(start_point, end_point, num_paths, preferred_path);
+            all_paths = v_path.replan(start_point, end_point, num_paths, preferred_path);
         }
 
         //move_base was not running, there are no previous paths. So planning should be done from scratch
         else
         {
             //Clear all previous paths and preferences before getting new path
-            voronoi_path.clearPreviousPaths();
+            v_path.clearPreviousPaths();
             preferred_path = 0;
-            all_paths = voronoi_path.getPath(start_point, end_point, num_paths);
+            all_paths = v_path.getPath(start_point, end_point, num_paths);
             prev_goal = end_point;
         }
 
@@ -193,7 +193,7 @@ namespace shared_voronoi_global_planner
         if (!all_paths.empty() && plan.empty())
         {
             //Interpolate path to get even separation between waypoints
-            voronoi_path.interpolatePaths(all_paths, path_waypoint_sep);
+            v_path.interpolatePaths(all_paths, path_waypoint_sep);
             all_paths_meters.clear();
             all_paths_meters.resize(all_paths.size());
             visualization_msgs::MarkerArray marker_array;
@@ -418,7 +418,7 @@ namespace shared_voronoi_global_planner
         }
 
         //If the angular difference of a path is greater than selection_threshold %, change cost to infinity
-        std::vector<double> total_costs = voronoi_path.getAllPathCosts();
+        std::vector<double> total_costs = v_path.getAllPathCosts();
         double min_val = *std::min_element(ang_diff_sq.begin(), ang_diff_sq.end());
         for (int i = 0; i < ang_diff_sq.size(); ++i)
         {
@@ -461,7 +461,7 @@ namespace shared_voronoi_global_planner
                 local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset + local_costmap.info.height));
                 local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset, y_pixel_offset + local_costmap.info.height));
 
-                voronoi_path.setLocalVertices(local_vertices);
+                v_path.setLocalVertices(local_vertices);
             }
 
             //Restore modified global costmap pixels to old value in previous loop, in cases when local obstacle is moving
@@ -558,7 +558,7 @@ namespace shared_voronoi_global_planner
 
     void SharedVoronoiGlobalPlanner::cancelCB(const actionlib_msgs::GoalIDConstPtr &msg)
     {
-        voronoi_path.clearPreviousPaths();
+        v_path.clearPreviousPaths();
     }
 
     bool SharedVoronoiGlobalPlanner::joystickExceedsThreshold(const geometry_msgs::Twist &cmd_vel, const double max_lin_command,
@@ -572,9 +572,9 @@ namespace shared_voronoi_global_planner
         std::vector<voronoi_path::GraphNode> nodes;
         std::vector<voronoi_path::GraphNode> lonely_nodes;
         std::vector<voronoi_path::GraphNode> centers;
-        voronoi_path.getObstacleCentroids(centers);
-        voronoi_path.getEdges(nodes);
-        voronoi_path.getDisconnectedNodes(lonely_nodes);
+        v_path.getObstacleCentroids(centers);
+        v_path.getEdges(nodes);
+        v_path.getDisconnectedNodes(lonely_nodes);
 
         //Markers for voronoi edges
         visualization_msgs::MarkerArray marker_array;
@@ -694,17 +694,17 @@ namespace shared_voronoi_global_planner
         nh.getParam("path_vertex_angle_threshold", path_vertex_angle_threshold);
 
         //Set parameters for voronoi path object
-        voronoi_path.h_class_threshold = h_class_threshold;
-        voronoi_path.print_timings = print_timings;
-        voronoi_path.node_connection_threshold_pix = node_connection_threshold_pix;
-        voronoi_path.extra_point_distance = extra_point_distance;
-        voronoi_path.min_node_sep_sq = min_node_sep_sq;
-        voronoi_path.trimming_collision_threshold = trimming_collision_threshold;
-        voronoi_path.search_radius = search_radius;
-        voronoi_path.open_cv_scale = open_cv_scale;
-        voronoi_path.pixels_to_skip = pixels_to_skip;
-        voronoi_path.lonely_branch_dist_threshold = lonely_branch_dist_threshold;
-        voronoi_path.path_waypoint_sep = path_waypoint_sep;
-        voronoi_path.path_vertex_angle_threshold = path_vertex_angle_threshold;
+        v_path.h_class_threshold = h_class_threshold;
+        v_path.print_timings = print_timings;
+        v_path.node_connection_threshold_pix = node_connection_threshold_pix;
+        v_path.extra_point_distance = extra_point_distance;
+        v_path.min_node_sep_sq = min_node_sep_sq;
+        v_path.trimming_collision_threshold = trimming_collision_threshold;
+        v_path.search_radius = search_radius;
+        v_path.open_cv_scale = open_cv_scale;
+        v_path.pixels_to_skip = pixels_to_skip;
+        v_path.lonely_branch_dist_threshold = lonely_branch_dist_threshold;
+        v_path.path_waypoint_sep = path_waypoint_sep;
+        v_path.path_vertex_angle_threshold = path_vertex_angle_threshold;
     }
 } // namespace shared_voronoi_global_planner

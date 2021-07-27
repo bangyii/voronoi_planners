@@ -122,7 +122,7 @@ generate_messages(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 INCLUDE_DIRS include
-#  LIBRARIES voronoi_path_planner_no_goal
+ LIBRARIES voronoi_path
  CATKIN_DEPENDS nav_msgs roscpp message_runtime
 #  DEPENDS system_lib
 )
@@ -140,9 +140,9 @@ include
 )
 
 
-add_library(voronoi_path_planner_no_goal src/voronoi_path.cpp)
-add_dependencies(voronoi_path_planner_no_goal ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(voronoi_path_planner_no_goal ${OpenCV_LIBS})
+add_library(voronoi_path src/voronoi_path.cpp)
+add_dependencies(voronoi_path ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(voronoi_path ${OpenCV_LIBS})
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}_lib
@@ -153,7 +153,7 @@ target_link_libraries(voronoi_path_planner_no_goal ${OpenCV_LIBS})
 ## either from message generation or dynamic reconfigure
 add_executable(${PROJECT_NAME}_node src/shared_voronoi_without_goal_node.cpp)
 add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_node voronoi_path_planner_no_goal ${catkin_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_node voronoi_path ${catkin_LIBRARIES})
 
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
@@ -196,7 +196,7 @@ target_link_libraries(${PROJECT_NAME}_node voronoi_path_planner_no_goal ${catkin
 # )
 
 ## Mark libraries for installation
-install(TARGETS voronoi_path_planner_no_goal
+install(TARGETS voronoi_path
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}

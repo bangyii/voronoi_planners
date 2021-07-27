@@ -45,7 +45,7 @@ namespace shared_voronoi_global_planner
         /**
          * Voronoi path object which is used for planning
          **/
-        voronoi_path::voronoi_path voronoi_path;
+        voronoi_path::voronoi_path v_path;
 
         /**
          * Flag indicating whether the planner has been initialized
