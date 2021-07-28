@@ -754,15 +754,15 @@ namespace voronoi_path
         }
 
         //TODO: Handle this properly, magnitude may be different
-        else if(fabs(angle_diff) < 0.005)
-            return false;
+        // else if(fabs(angle_diff) < 0.005)
+        //     return false;
 
         int steps = ceil(fabs(angle_diff) / 0.01);  //TODO: Hardcoded angular step size
         double mag_step = mag_diff / steps;
         double angle_step = angle_diff / steps;
         std::vector<GraphNode> interp_connection;
         GraphNode interp_vec = vec1;
-        for(int step = 1; step <= steps; ++step)
+        for(int step = 1; step <= steps && angle_diff > 0.005; ++step)
         {
             //Rotate interp_point vector;
             interp_vec.x = (interp_vec.x) * cos(angle_step) - (interp_vec.y) * sin(angle_step);
@@ -1057,7 +1057,7 @@ namespace voronoi_path
                     bool collides = false;
                     for(int k = 1; k < prev_path->path.size(); ++k)
                     {
-                        if(edgeCollides(prev_path->path[k-1], prev_path->path[k], collision_threshold))
+                        if(edgeCollides(prev_path->path[k-1], prev_path->path[k], occupancy_threshold))
                         {
                             std::cout << "Path " << i << " collides\n";
                             collides = true;
