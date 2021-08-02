@@ -40,12 +40,12 @@ namespace shared_voronoi_global_planner
         /** 
          * Internal map which merges global and local costmap from ros
          **/
-        voronoi_path::Map map;
+        Map map;
 
         /**
          * Voronoi path object which is used for planning
          **/
-        voronoi_path::voronoi_path v_path;
+        voronoi_path::VoronoiPath v_path;
 
         /**
          * Flag indicating whether the planner has been initialized
@@ -239,7 +239,7 @@ namespace shared_voronoi_global_planner
          * Internal variable to store previous goal. This will help determine if the goal has changed and a full planning needs to be 
          * done, instead of replanning from previous time step
          **/
-        voronoi_path::GraphNode prev_goal;
+        GraphNode prev_goal;
 
         /**
          * Last position where sorted node list was computed

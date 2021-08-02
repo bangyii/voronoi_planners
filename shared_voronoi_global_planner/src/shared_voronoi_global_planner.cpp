@@ -58,7 +58,7 @@ namespace shared_voronoi_global_planner
 
         //Publish adjacency list and corresponding info to
         std::vector<std::vector<int>> adj_list_raw = v_path.getAdjList();
-        std::vector<voronoi_path::GraphNode> node_inf_raw = v_path.getNodeInfo();
+        std::vector<GraphNode> node_inf_raw = v_path.getNodeInfo();
         shared_voronoi_global_planner::AdjacencyList adj_list;
         shared_voronoi_global_planner::NodeInfoList node_info;
         adj_list.nodes.resize(adj_list_raw.size());
@@ -158,9 +158,9 @@ namespace shared_voronoi_global_planner
         }
 
         //Get start and end points in terms of global costmap pixels
-        voronoi_path::GraphNode end_point((goal_.pose.position.x - map.origin.position.x) / map.resolution,
+        GraphNode end_point((goal_.pose.position.x - map.origin.position.x) / map.resolution,
                                           (goal_.pose.position.y - map.origin.position.y) / map.resolution);
-        voronoi_path::GraphNode start_point((start_.pose.position.x - map.origin.position.x) / map.resolution,
+        GraphNode start_point((start_.pose.position.x - map.origin.position.x) / map.resolution,
                                             (start_.pose.position.y - map.origin.position.y) / map.resolution);
 
         //Send previous time steps' paths when too near to goal if there are already paths found
@@ -455,11 +455,11 @@ namespace shared_voronoi_global_planner
 
             if (add_local_costmap_corners)
             {
-                std::vector<voronoi_path::GraphNode> local_vertices;
-                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset, y_pixel_offset));
-                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset));
-                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset + local_costmap.info.height));
-                local_vertices.push_back(voronoi_path::GraphNode(x_pixel_offset, y_pixel_offset + local_costmap.info.height));
+                std::vector<GraphNode> local_vertices;
+                local_vertices.push_back(GraphNode(x_pixel_offset, y_pixel_offset));
+                local_vertices.push_back(GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset));
+                local_vertices.push_back(GraphNode(x_pixel_offset + local_costmap.info.width, y_pixel_offset + local_costmap.info.height));
+                local_vertices.push_back(GraphNode(x_pixel_offset, y_pixel_offset + local_costmap.info.height));
 
                 v_path.setLocalVertices(local_vertices);
             }
@@ -569,9 +569,9 @@ namespace shared_voronoi_global_planner
 
     void SharedVoronoiGlobalPlanner::publishVoronoiViz()
     {
-        std::vector<voronoi_path::GraphNode> nodes;
-        std::vector<voronoi_path::GraphNode> lonely_nodes;
-        std::vector<voronoi_path::GraphNode> centers;
+        std::vector<GraphNode> nodes;
+        std::vector<GraphNode> lonely_nodes;
+        std::vector<GraphNode> centers;
         v_path.getObstacleCentroids(centers);
         v_path.getEdges(nodes);
         v_path.getDisconnectedNodes(lonely_nodes);
