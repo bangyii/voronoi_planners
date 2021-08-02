@@ -11,6 +11,8 @@
 #define JCV_PI 3.141592653589793115997963468544185161590576171875
 
 #include "jc_voronoi_clip.h"
+#include <shared_voronoi_without_goal/graph_node.h>
+#include <shared_voronoi_without_goal/map.h>
 #include <chrono>
 #include <limits>
 #include <cmath>
@@ -27,72 +29,6 @@
 namespace voronoi_path
 {
     /**
-     * Type used to store coordinates of nodes. Coordinates are pixels in the map
-     **/
-    struct GraphNode
-    {
-        double x;
-        double y;
-        GraphNode() : x(0), y(0) {}
-        GraphNode(double _x, double _y) : x(_x), y(_y) {}
-        GraphNode(std::pair<double, double> in_pair) : x(in_pair.first), y(in_pair.second) {}
-
-        GraphNode operator*(const double &mult) const
-        {
-            return GraphNode(x * mult, y * mult);
-        }
-
-        GraphNode operator/(const double &mult) const
-        {
-            return GraphNode(x / mult, y / mult);
-        }
-
-        GraphNode operator+(const double &incr) const
-        {
-            return GraphNode(x + incr, y + incr);
-        }
-
-        GraphNode operator-(const double &incr) const
-        {
-            return GraphNode(x - incr, y - incr);
-        }
-
-        GraphNode &operator+=(const GraphNode &incr)
-        {
-            x = x + incr.x;
-            y = y + incr.y;
-            return *this;
-        }
-
-        GraphNode operator+(const GraphNode &incr) const
-        {
-            return GraphNode(x + incr.x, y + incr.y);
-        }
-
-        GraphNode operator-(const GraphNode &incr) const
-        {
-            return GraphNode(x - incr.x, y - incr.y);
-        }
-
-        bool operator==(const GraphNode &rhs) const
-        {
-            return (x == rhs.x && y == rhs.y);
-        }
-
-        double getMagnitude() const
-        {
-            return sqrt(pow(x, 2) + pow(y, 2));
-        }
-
-        void setUnitVector()
-        {
-            double magnitude = sqrt(pow(x, 2) + pow(y, 2));
-            x /= magnitude;
-            y /= magnitude;
-        }
-    };
-
-    /**
      * Struct to store vector of GraphNodes (a path) and its corresponding id
      **/
     struct Path
@@ -106,46 +42,6 @@ namespace voronoi_path
         {
             id = _id;
             path = in_path;
-        }
-    };
-
-    /**
-     * Same structure as ROS's nav_msgs::OccupancyGrid type
-     * Redefined here to decouple from ROS
-     **/
-    struct Map
-    {
-        std::vector<signed char> data;
-        std::string frame_id;
-        double resolution;
-        int width;
-        int height;
-        struct
-        {
-            struct
-            {
-                double x;
-                double y;
-                double z;
-            } position;
-
-            struct
-            {
-                double x;
-                double y;
-                double z;
-                double w;
-            } orientation;
-        } origin;
-
-        Map() {}
-        Map(std::vector<int> in_data, int _width, int _height, double _resolution, std::string _frame_id)
-        {
-            data.insert(data.begin(), in_data.begin(), in_data.end());
-            width = _width;
-            height = _height;
-            resolution = _resolution;
-            frame_id = _frame_id;
         }
     };
 

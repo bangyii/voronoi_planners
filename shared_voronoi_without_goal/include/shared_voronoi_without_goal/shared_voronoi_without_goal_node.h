@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-voronoi_path::Map map;
+Map map;
 voronoi_path::VoronoiPath v_path;
 ros::Subscriber global_map_sub;
 ros::Subscriber move_base_cancel_sub;

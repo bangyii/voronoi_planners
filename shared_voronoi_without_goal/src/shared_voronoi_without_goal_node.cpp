@@ -56,9 +56,9 @@ bool readParams(ros::NodeHandle &nh)
 
 void publishVoronoiViz()
 {
-	std::vector<voronoi_path::GraphNode> nodes;
-	std::vector<voronoi_path::GraphNode> lonely_nodes;
-	std::vector<voronoi_path::GraphNode> centers;
+	std::vector<GraphNode> nodes;
+	std::vector<GraphNode> lonely_nodes;
+	std::vector<GraphNode> centers;
 	v_path.getObstacleCentroids(centers);
 	v_path.getEdges(nodes);
 	v_path.getDisconnectedNodes(lonely_nodes);
@@ -212,7 +212,7 @@ void makePlan(const ros::WallTimerEvent &e)
 		ROS_ERROR_STREAM(Exception.what());
 	}
 
-	voronoi_path::GraphNode start_point((robot_pose.position.x - map.origin.position.x) / map.resolution,
+	GraphNode start_point((robot_pose.position.x - map.origin.position.x) / map.resolution,
 										(robot_pose.position.y - map.origin.position.y) / map.resolution);
 
 	//DFS planning

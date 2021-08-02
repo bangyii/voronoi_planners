@@ -144,6 +144,14 @@ add_library(voronoi_path src/voronoi_path.cpp)
 add_dependencies(voronoi_path ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(voronoi_path ${OpenCV_LIBS})
 
+add_library(map include/shared_voronoi_without_goal/map.h)
+add_dependencies(map ${catkin_EXPORTED_TARGETS})
+set_target_properties(map PROPERTIES LINKER_LANGUAGE CXX)
+
+add_library(graph_node include/shared_voronoi_without_goal/graph_node.h)
+add_dependencies(graph_node ${catkin_EXPORTED_TARGETS})
+set_target_properties(graph_node PROPERTIES LINKER_LANGUAGE CXX)
+
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}_lib
 #   src/shared_voronoi_global_planner.cpp
@@ -153,7 +161,7 @@ target_link_libraries(voronoi_path ${OpenCV_LIBS})
 ## either from message generation or dynamic reconfigure
 add_executable(${PROJECT_NAME}_node src/shared_voronoi_without_goal_node.cpp)
 add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_node voronoi_path ${catkin_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_node voronoi_path map graph_node ${catkin_LIBRARIES})
 
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
@@ -196,7 +204,7 @@ target_link_libraries(${PROJECT_NAME}_node voronoi_path ${catkin_LIBRARIES})
 # )
 
 ## Mark libraries for installation
-install(TARGETS voronoi_path
+install(TARGETS voronoi_path map graph_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
