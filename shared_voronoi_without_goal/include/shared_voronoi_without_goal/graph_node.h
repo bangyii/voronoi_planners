@@ -1,3 +1,6 @@
+#ifndef GRAPH_NODE_H_
+#define GRAPH_NODE_H_
+
 #include <map>
 #include <cmath>
 
@@ -67,3 +70,4 @@ public:
 		y /= magnitude;
 	}
 };
+#endif

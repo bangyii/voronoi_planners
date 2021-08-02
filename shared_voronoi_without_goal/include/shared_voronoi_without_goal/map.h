@@ -1,3 +1,6 @@
+#ifndef MAP_H_
+#define MAP_H_
+
 #include <vector>
 #include <string>
 
@@ -42,3 +45,4 @@ class Map
 			} orientation;
 		} origin;
 };
+#endif
