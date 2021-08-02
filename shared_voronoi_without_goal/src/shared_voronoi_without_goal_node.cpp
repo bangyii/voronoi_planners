@@ -81,8 +81,7 @@ void publishVoronoiViz()
 	for (const auto &node : nodes)
 	{
 		geometry_msgs::Point temp_point;
-		temp_point.x = node.x * static_cast<double>(map.resolution) + map.origin.position.x;
-		temp_point.y = node.y * static_cast<double>(map.resolution) + map.origin.position.y;
+		map.mapToWorld(node.x, node.y, temp_point.x, temp_point.y);
 
 		if (node.x > 0 && node.x < 0.01 && node.y > 0 && node.y < 0.01)
 			break;
@@ -108,8 +107,7 @@ void publishVoronoiViz()
 	for (const auto &node : lonely_nodes)
 	{
 		geometry_msgs::Point temp_point;
-		temp_point.x = node.x * static_cast<double>(map.resolution) + map.origin.position.x;
-		temp_point.y = node.y * static_cast<double>(map.resolution) + map.origin.position.y;
+		map.mapToWorld(node.x, node.y, temp_point.x, temp_point.y);
 
 		marker_lonely.points.push_back(std::move(temp_point));
 	}
@@ -132,8 +130,7 @@ void publishVoronoiViz()
 	for (const auto &center : centers)
 	{
 		geometry_msgs::Point temp_point;
-		temp_point.x = center.x * static_cast<double>(map.resolution) + map.origin.position.x;
-		temp_point.y = center.y * static_cast<double>(map.resolution) + map.origin.position.y;
+		map.mapToWorld(center.x, center.y, temp_point.x, temp_point.y);
 
 		marker_obstacles.points.push_back(std::move(temp_point));
 	}
@@ -212,8 +209,8 @@ void makePlan(const ros::WallTimerEvent &e)
 		ROS_ERROR_STREAM(Exception.what());
 	}
 
-	GraphNode start_point((robot_pose.position.x - map.origin.position.x) / map.resolution,
-										(robot_pose.position.y - map.origin.position.y) / map.resolution);
+	GraphNode start_point;
+	map.worldToMap(robot_pose.position.x, robot_pose.position.y, start_point.x, start_point.y);
 
 	//DFS planning
 	all_paths = v_path.backtrackPlan(start_point);
@@ -296,8 +293,7 @@ void makePlan(const ros::WallTimerEvent &e)
 				const auto &pose = all_paths[i].path[k];
 				geometry_msgs::PoseStamped new_pose;
 				new_pose.header = header;
-				new_pose.pose.position.x = pose.x * map.resolution + map.origin.position.x;
-				new_pose.pose.position.y = pose.y * map.resolution + map.origin.position.y;
+				map.mapToWorld(pose.x, pose.y, new_pose.pose.position.x, new_pose.pose.position.y);
 				new_pose.pose.position.z = 0;
 
 				//TODO: Set orientation of intermediate poses

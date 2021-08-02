@@ -122,7 +122,7 @@ generate_messages(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 INCLUDE_DIRS include
- LIBRARIES voronoi_path
+ LIBRARIES voronoi_path map graph_node
  CATKIN_DEPENDS nav_msgs roscpp message_runtime
 #  DEPENDS system_lib
 )
