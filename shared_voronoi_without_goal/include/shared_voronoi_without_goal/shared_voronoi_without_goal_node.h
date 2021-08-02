@@ -5,7 +5,7 @@
 #include <vector>
 
 voronoi_path::Map map;
-voronoi_path::voronoi_path v_path;
+voronoi_path::VoronoiPath v_path;
 ros::Subscriber global_map_sub;
 ros::Subscriber move_base_cancel_sub;
 ros::Publisher all_paths_pub;

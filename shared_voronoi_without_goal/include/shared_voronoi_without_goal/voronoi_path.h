@@ -165,10 +165,10 @@ namespace voronoi_path
         }
     };
 
-    class voronoi_path
+    class VoronoiPath
     {
     public:
-        voronoi_path();
+        VoronoiPath();
 
         /**
          * Get all the nodes in the voronoi diagram. ith node is connected to i+1 node, i is even.

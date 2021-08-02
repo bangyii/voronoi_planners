@@ -10,22 +10,22 @@
 
 namespace voronoi_path
 {
-    voronoi_path::voronoi_path()
+    VoronoiPath::VoronoiPath()
     {
     }
 
-    void voronoi_path::setLocalVertices(const std::vector<GraphNode> &vertices)
+    void VoronoiPath::setLocalVertices(const std::vector<GraphNode> &vertices)
     {
         local_vertices = vertices;
     }
 
-    uint32_t voronoi_path::getUniqueID()
+    uint32_t VoronoiPath::getUniqueID()
     {
         static uint32_t id = 1;
         return id++;
     }
 
-    std::vector<std::complex<double>> voronoi_path::findObstacleCentroids()
+    std::vector<std::complex<double>> VoronoiPath::findObstacleCentroids()
     {
         if (map_ptr->data.size() != 0)
         {
@@ -108,7 +108,7 @@ namespace voronoi_path
         return centers;
     }
 
-    std::vector<jcv_point> voronoi_path::fillOccupancyVector(const int &start_index, const int &num_pixels)
+    std::vector<jcv_point> VoronoiPath::fillOccupancyVector(const int &start_index, const int &num_pixels)
     {
         std::vector<jcv_point> points_vec;
         for (int i = start_index; i < start_index + num_pixels; i += (pixels_to_skip + 1))
@@ -127,7 +127,7 @@ namespace voronoi_path
         return points_vec;
     }
 
-    bool voronoi_path::mapToGraph(Map *map_ptr_)
+    bool VoronoiPath::mapToGraph(Map *map_ptr_)
     {
         //Lock mutex to ensure adj_list is not being used
         Profiler complete_profiler, section_profiler;
@@ -159,7 +159,7 @@ namespace voronoi_path
         for (int i = 0; i < num_threads - 1; ++i)
         {
             start_pixel = i * num_pixels;
-            future_vector.emplace_back(std::async(std::launch::async, &voronoi_path::fillOccupancyVector, this, start_pixel, num_pixels));
+            future_vector.emplace_back(std::async(std::launch::async, &VoronoiPath::fillOccupancyVector, this, start_pixel, num_pixels));
         }
 
         //For last thread, take all remaining pixels
@@ -254,7 +254,7 @@ namespace voronoi_path
         return true;
     }
 
-    bool voronoi_path::edgesToAdjacency(const std::vector<const jcv_edge *> &edge_vector)
+    bool VoronoiPath::edgesToAdjacency(const std::vector<const jcv_edge *> &edge_vector)
     {
         //Reset all variables
         adj_list.clear();
@@ -345,7 +345,7 @@ namespace voronoi_path
         return true;
     }
     
-    bool voronoi_path::hasCycle(int cur_node, int cur_depth, std::vector<int> &visited_list, int prev)
+    bool VoronoiPath::hasCycle(int cur_node, int cur_depth, std::vector<int> &visited_list, int prev)
     {
         if(cur_depth > node_depth_threshold)
             return false;
@@ -377,19 +377,19 @@ namespace voronoi_path
         return false;
     }
 
-    std::vector<std::vector<int>> voronoi_path::getAdjList()
+    std::vector<std::vector<int>> VoronoiPath::getAdjList()
     {
         std::lock_guard<std::mutex> lock(voronoi_mtx);
         return adj_list;
     }
 
-    std::vector<GraphNode> voronoi_path::getNodeInfo()
+    std::vector<GraphNode> VoronoiPath::getNodeInfo()
     {
         std::lock_guard<std::mutex> lock(voronoi_mtx);
         return node_inf;
     }
 
-    std::vector<std::pair<double, int>> voronoi_path::getSortedNodeList(GraphNode position)
+    std::vector<std::pair<double, int>> VoronoiPath::getSortedNodeList(GraphNode position)
     {
         sorted_node_list.clear();
         double min_start_dist = std::numeric_limits<double>::infinity();
@@ -405,7 +405,7 @@ namespace voronoi_path
         return sorted_node_list;
     }
 
-    bool voronoi_path::getObstacleCentroids(std::vector<GraphNode> &centroids)
+    bool VoronoiPath::getObstacleCentroids(std::vector<GraphNode> &centroids)
     {
         centroids.reserve(centers.size());
         for (const auto &elem : centers)
@@ -414,12 +414,12 @@ namespace voronoi_path
         return true;
     }
 
-    std::vector<double> voronoi_path::getAllPathCosts()
+    std::vector<double> VoronoiPath::getAllPathCosts()
     {
         return previous_path_costs;
     }
 
-    bool voronoi_path::getEdges(std::vector<GraphNode> &edges)
+    bool VoronoiPath::getEdges(std::vector<GraphNode> &edges)
     {
         std::lock_guard<std::mutex> lock(voronoi_mtx);
 
@@ -437,7 +437,7 @@ namespace voronoi_path
         return true;
     }
 
-    bool voronoi_path::getDisconnectedNodes(std::vector<GraphNode> &nodes)
+    bool VoronoiPath::getDisconnectedNodes(std::vector<GraphNode> &nodes)
     {
         std::lock_guard<std::mutex> lock(voronoi_mtx);
         for (int i = 0; i < num_nodes; ++i)
@@ -450,7 +450,7 @@ namespace voronoi_path
         return true;
     }
 
-    void voronoi_path::printEdges()
+    void VoronoiPath::printEdges()
     {
         std::lock_guard<std::mutex> lock(voronoi_mtx);
         for (int i = 0; i < num_nodes; ++i)
@@ -466,13 +466,13 @@ namespace voronoi_path
         std::cout << std::endl;
     }
 
-    uint32_t voronoi_path::hash(const double &x, const double &y)
+    uint32_t VoronoiPath::hash(const double &x, const double &y)
     {
         uint32_t hashed_int = static_cast<uint32_t>((static_cast<uint16_t>(x) << 16) ^ static_cast<uint16_t>(y));
         return hashed_int;
     }
 
-    bool voronoi_path::interpolateContractPaths(std::vector<Path> &paths)
+    bool VoronoiPath::interpolateContractPaths(std::vector<Path> &paths)
     {
         //Increase resolution of paths by interpolation before contracting to give smoother result
         interpolatePaths(paths, path_waypoint_sep);
@@ -485,7 +485,7 @@ namespace voronoi_path
         return true;
     }
 
-    bool voronoi_path::findStuckVertex(std::vector<GraphNode> &path)
+    bool VoronoiPath::findStuckVertex(std::vector<GraphNode> &path)
     {
         // for(int j = 1; j < path.size() - 1; ++j)
         // {
@@ -556,7 +556,7 @@ namespace voronoi_path
         }
     }
 
-    bool voronoi_path::contractPath(std::vector<GraphNode> &path)
+    bool VoronoiPath::contractPath(std::vector<GraphNode> &path)
     {
         //Calculate minimum distance between two poses in path should have, distance in pix squared
         double waypoint_sep_sq = path_waypoint_sep * path_waypoint_sep / map_ptr->resolution / map_ptr->resolution;
@@ -688,7 +688,7 @@ namespace voronoi_path
         return true;
     }
 
-    void voronoi_path::backtrack(std::vector<int> &path, double cur_dist, double last_branch_dist, const int &prev_node, const int &cur_node, std::vector<std::vector<int>> &paths, const double &backtrack_plan_threshold)
+    void VoronoiPath::backtrack(std::vector<int> &path, double cur_dist, double last_branch_dist, const int &prev_node, const int &cur_node, std::vector<std::vector<int>> &paths, const double &backtrack_plan_threshold)
     {
         //Add cur_node to path
         path.push_back(cur_node);
@@ -739,7 +739,7 @@ namespace voronoi_path
         return;
     }
 
-    bool voronoi_path::isBacktrackDistinct(std::vector<Path>::iterator &path1, std::vector<Path>::iterator &path2)
+    bool VoronoiPath::isBacktrackDistinct(std::vector<Path>::iterator &path1, std::vector<Path>::iterator &path2)
     {
         //Interpolate from path 1 endpoint to path 2 endpoint
         GraphNode start = path1->path.front();
@@ -797,7 +797,7 @@ namespace voronoi_path
             return false;
     }
 
-    std::vector<std::pair<double, int>> voronoi_path::getPathHeadings(const std::vector<Path> &paths)
+    std::vector<std::pair<double, int>> VoronoiPath::getPathHeadings(const std::vector<Path> &paths)
     {
         std::vector<std::pair<double, int>> average_headings_pair;
         for(int i = 0; i < paths.size(); ++i)
@@ -834,7 +834,7 @@ namespace voronoi_path
         return average_headings_pair;
     }
 
-    std::vector<Path> voronoi_path::backtrackPlan(const GraphNode &start)
+    std::vector<Path> VoronoiPath::backtrackPlan(const GraphNode &start)
     {
         //Block until voronoi is no longer being updated. Prevents issue where planning is done using an empty adjacency list
         std::lock_guard<std::mutex> lock(voronoi_mtx);
@@ -1010,12 +1010,12 @@ namespace voronoi_path
         return all_path_nodes;
     }
 
-    std::vector<Path> voronoi_path::getVizPaths()
+    std::vector<Path> VoronoiPath::getVizPaths()
     {
         return viz_paths;
     }
 
-    std::vector<Path> voronoi_path::linkBacktrackPaths(std::vector<Path> &prev_paths, std::vector<Path> &cur_paths)
+    std::vector<Path> VoronoiPath::linkBacktrackPaths(std::vector<Path> &prev_paths, std::vector<Path> &cur_paths)
     {
         //Compare paths within a certain heading +- range from current path's heading
         auto prev_path_headings = getPathHeadings(prev_paths);
@@ -1090,7 +1090,7 @@ namespace voronoi_path
     }
 
 
-    std::vector<Path> voronoi_path::getPath(const GraphNode &start, const GraphNode &end, const int &num_paths)
+    std::vector<Path> VoronoiPath::getPath(const GraphNode &start, const GraphNode &end, const int &num_paths)
     {
         //Block until voronoi is no longer being updated. Prevents issue where planning is done using an empty adjacency list
         std::lock_guard<std::mutex> lock(voronoi_mtx);
@@ -1177,7 +1177,7 @@ namespace voronoi_path
         return path;
     }
 
-    std::vector<Path> voronoi_path::replan(GraphNode &start, GraphNode &end, int num_paths, int &pref_path)
+    std::vector<Path> VoronoiPath::replan(GraphNode &start, GraphNode &end, int num_paths, int &pref_path)
     {
         Profiler complete_profiler, contract_profiler;
         if (previous_paths.empty())
@@ -1311,7 +1311,7 @@ namespace voronoi_path
         return replanned_paths;
     }
 
-    bool voronoi_path::getNearestNode(const GraphNode &start, const GraphNode &end, int &start_node, int &end_node)
+    bool VoronoiPath::getNearestNode(const GraphNode &start, const GraphNode &end, int &start_node, int &end_node)
     {
         bool find_end = true;
         if(start == end)
@@ -1364,7 +1364,7 @@ namespace voronoi_path
         return true;
     }
 
-    std::vector<GraphNode> voronoi_path::convertToPixelPath(const std::vector<int> &path_)
+    std::vector<GraphNode> VoronoiPath::convertToPixelPath(const std::vector<int> &path_)
     {
         std::vector<GraphNode> return_path;
         return_path.reserve(path_.size());
@@ -1375,7 +1375,7 @@ namespace voronoi_path
     }
 
     //https://www.cs.huji.ac.il/~jeff/aaai10/02/AAAI10-216.pdf
-    std::complex<double> voronoi_path::calcHomotopyClass(const std::vector<GraphNode> &path_)
+    std::complex<double> VoronoiPath::calcHomotopyClass(const std::vector<GraphNode> &path_)
     {
         std::vector<std::complex<double>> path;
         path.reserve(path_.size());
@@ -1442,7 +1442,7 @@ namespace voronoi_path
         return path_sum;
     }
 
-    bool voronoi_path::kthShortestPaths(const int &start_node, const int &end_node, const std::vector<int> &shortestPath, std::vector<std::vector<int>> &all_paths, const int &num_paths)
+    bool VoronoiPath::kthShortestPaths(const int &start_node, const int &end_node, const std::vector<int> &shortestPath, std::vector<std::vector<int>> &all_paths, const int &num_paths)
     {
         //Reserve num_paths + 1, + 1 is to store the original shortest path
         all_paths.reserve(num_paths + 1);
@@ -1653,7 +1653,7 @@ namespace voronoi_path
             return false;
     }
 
-    bool voronoi_path::findShortestPath(const int &start_node, const int &end_node, std::vector<int> &path)
+    bool VoronoiPath::findShortestPath(const int &start_node, const int &end_node, std::vector<int> &path)
     {
         //Create open list, boolean closed_list, and list storing previous node required to reach node at index i
         std::vector<std::pair<int, NodeInfo>> open_list;
@@ -1776,7 +1776,7 @@ namespace voronoi_path
         return true;
     }
 
-    void voronoi_path::removeObstacleVertices(std::vector<const jcv_edge *> &edge_vector)
+    void VoronoiPath::removeObstacleVertices(std::vector<const jcv_edge *> &edge_vector)
     {
         //Get edge vertices that are in obtacle
         //Data loaded by map server is upside down. Top of image is last of data array
@@ -1840,7 +1840,7 @@ namespace voronoi_path
         // }
     }
 
-    void voronoi_path::removeCollisionEdges(std::vector<const jcv_edge *> &edge_vector)
+    void VoronoiPath::removeCollisionEdges(std::vector<const jcv_edge *> &edge_vector)
     {
         std::vector<int> delete_indices;
         for (int i = 0; i < edge_vector.size(); ++i)
@@ -1894,14 +1894,14 @@ namespace voronoi_path
         // }
     }
 
-    double voronoi_path::vectorAngle(const double vec1[2], const double vec2[2])
+    double VoronoiPath::vectorAngle(const double vec1[2], const double vec2[2])
     {
         double dot = vec1[0] * vec2[0] + vec1[1] * vec2[1];
         double det = vec1[0] * vec2[1] - vec1[1] * vec2[0];
         return std::atan2(det, dot);
     }
 
-    bool voronoi_path::edgeCollides(const GraphNode &start, const GraphNode &end, int threshold)
+    bool VoronoiPath::edgeCollides(const GraphNode &start, const GraphNode &end, int threshold)
     {
         //Check start and end cells first
         try
@@ -1957,22 +1957,22 @@ namespace voronoi_path
         return false;
     }
 
-    double voronoi_path::manhattanDist(const GraphNode &a, const GraphNode &b)
+    double VoronoiPath::manhattanDist(const GraphNode &a, const GraphNode &b)
     {
         return fabs(a.x - b.x) + fabs(a.y - b.y);
     }
 
-    double voronoi_path::euclideanDist(const GraphNode &a, const GraphNode &b)
+    double VoronoiPath::euclideanDist(const GraphNode &a, const GraphNode &b)
     {
         return sqrt(pow(a.x - b.x, 2) + pow(a.y - b.y, 2));
     }
 
-    int voronoi_path::getNumberOfNodes()
+    int VoronoiPath::getNumberOfNodes()
     {
         return num_nodes;
     }
 
-    bool voronoi_path::interpolatePaths(std::vector<Path> &paths, double path_waypoint_sep)
+    bool VoronoiPath::interpolatePaths(std::vector<Path> &paths, double path_waypoint_sep)
     {
         //Calculate minimum distance between two poses in path should have, distance in pix squared
         double waypoint_sep_sq = path_waypoint_sep * path_waypoint_sep / (map_ptr->resolution * map_ptr->resolution);
@@ -2011,7 +2011,7 @@ namespace voronoi_path
         return true;
     }
 
-    bool voronoi_path::clearPreviousPaths()
+    bool VoronoiPath::clearPreviousPaths()
     {
         previous_paths.clear();
         previous_path_costs.clear();
@@ -2019,17 +2019,17 @@ namespace voronoi_path
         return true;
     }
 
-    bool voronoi_path::hasPreviousPaths()
+    bool VoronoiPath::hasPreviousPaths()
     {
         return !previous_paths.empty();
     }
 
-    bool voronoi_path::isClassDifferent(const std::complex<double> &complex_1, const std::complex<double> &complex_2)
+    bool VoronoiPath::isClassDifferent(const std::complex<double> &complex_1, const std::complex<double> &complex_2)
     {
         return std::abs(complex_1 - complex_2) / std::abs(complex_1) > h_class_threshold;
     }
 
-    bool voronoi_path::removeExcessBranch(std::vector<std::vector<int>> &new_adj_list, double thresh, int curr_node, int prev_node, double cum_dist)
+    bool VoronoiPath::removeExcessBranch(std::vector<std::vector<int>> &new_adj_list, double thresh, int curr_node, int prev_node, double cum_dist)
     {
         //Branch is too long, break premptively
         if (cum_dist >= thresh)
@@ -2071,7 +2071,7 @@ namespace voronoi_path
     }
 
 
-    bool voronoi_path::liesInSquare(const GraphNode & point, const GraphNode & line_point_a, const GraphNode & line_point_b)
+    bool VoronoiPath::liesInSquare(const GraphNode & point, const GraphNode & line_point_a, const GraphNode & line_point_b)
     {
         //Checks if the point lies in a square form
         return (point.x - line_point_a.x) * (point.x - line_point_b.x) < 0.0 && (point.y - line_point_a.y) * (point.y - line_point_b.y) < 0.0;
