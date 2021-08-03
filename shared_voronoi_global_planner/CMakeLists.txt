@@ -20,7 +20,7 @@ find_package(catkin REQUIRED COMPONENTS
   visualization_msgs
   actionlib_msgs
   tf2_ros
-  voronoi_msgs
+  voronoi_msgs_and_types
   voronoi_planner_lib
 )
 

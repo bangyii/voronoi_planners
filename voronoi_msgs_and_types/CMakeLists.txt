@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(voronoi_msgs)
+project(voronoi_msgs_and_types)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -108,8 +108,8 @@ generate_messages(
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES voronoi_msgs
+ INCLUDE_DIRS include
+ LIBRARIES map graph_node
 #  CATKIN_DEPENDS message_generation message_runtime nav_msgs roscpp
 #  DEPENDS system_lib
 )
@@ -129,6 +129,14 @@ include_directories(
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/voronoi_msgs.cpp
 # )
+
+add_library(map include/voronoi_msgs_and_types/map.h)
+add_dependencies(map ${catkin_EXPORTED_TARGETS})
+set_target_properties(map PROPERTIES LINKER_LANGUAGE CXX)
+
+add_library(graph_node include/voronoi_msgs_and_types/graph_node.h)
+add_dependencies(graph_node ${catkin_EXPORTED_TARGETS})
+set_target_properties(graph_node PROPERTIES LINKER_LANGUAGE CXX)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -175,20 +183,20 @@ include_directories(
 #   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 # )
 
-## Mark libraries for installation
-## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
-# install(TARGETS ${PROJECT_NAME}
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
-# )
+# Mark libraries for installation
+# See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
+install(TARGETS map graph_node
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
+)
 
-## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN ".svn" EXCLUDE
-# )
+# Mark cpp header files for installation
+install(DIRECTORY include/${PROJECT_NAME}/
+  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+  FILES_MATCHING PATTERN "*.h"
+  PATTERN ".svn" EXCLUDE
+)
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES

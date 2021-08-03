@@ -21,7 +21,7 @@ find_package(catkin REQUIRED COMPONENTS
   actionlib_msgs
   tf2_ros
   voronoi_planner_lib
-  voronoi_msgs
+  voronoi_msgs_and_types
 )
 
 find_package(OpenCV 3 REQUIRED)

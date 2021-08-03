@@ -74,7 +74,7 @@
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
   <exec_depend>slam_toolbox</exec_depend>
-  <depend>voronoi_msgs</depend>
+  <depend>voronoi_msgs_and_types</depend>
   <depend>voronoi_planner_lib</depend>
 
 

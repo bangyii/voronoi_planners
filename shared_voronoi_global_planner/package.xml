@@ -61,7 +61,7 @@
   <depend>visualization_msgs</depend>
   <depend>tf2_ros</depend>
   <depend>tf2_geometry_msgs</depend>
-  <depend>voronoi_msgs</depend>
+  <depend>voronoi_msgs_and_types</depend>
   <depend>voronoi_planner_lib</depend>
 
   <!-- The export tag contains other, unspecified, tags -->

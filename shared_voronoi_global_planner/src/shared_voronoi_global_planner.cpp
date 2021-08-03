@@ -9,11 +9,11 @@
 
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <voronoi_msgs/AdjacencyList.h>
-#include <voronoi_msgs/AdjacencyNodes.h>
-#include <voronoi_msgs/NodeInfo.h>
-#include <voronoi_msgs/NodeInfoList.h>
-#include <voronoi_msgs/PathList.h>
+#include <voronoi_msgs_and_types/AdjacencyList.h>
+#include <voronoi_msgs_and_types/AdjacencyNodes.h>
+#include <voronoi_msgs_and_types/NodeInfo.h>
+#include <voronoi_msgs_and_types/NodeInfoList.h>
+#include <voronoi_msgs_and_types/PathList.h>
 
 PLUGINLIB_EXPORT_CLASS(shared_voronoi_global_planner::SharedVoronoiGlobalPlanner, nav_core::BaseGlobalPlanner)
 
@@ -58,8 +58,8 @@ namespace shared_voronoi_global_planner
         //Publish adjacency list and corresponding info to
         std::vector<std::vector<int>> adj_list_raw = v_path.getAdjList();
         std::vector<GraphNode> node_inf_raw = v_path.getNodeInfo();
-        voronoi_msgs::AdjacencyList adj_list;
-        voronoi_msgs::NodeInfoList node_info;
+        voronoi_msgs_and_types::AdjacencyList adj_list;
+        voronoi_msgs_and_types::NodeInfoList node_info;
         adj_list.nodes.resize(adj_list_raw.size());
         node_info.node_info.resize(node_inf_raw.size());
         for (int i = 0; i < node_inf_raw.size(); ++i)
@@ -111,9 +111,9 @@ namespace shared_voronoi_global_planner
 
             //Plan and voronoi diagram related topics
             global_path_pub = nh.advertise<nav_msgs::Path>("plan", 1);
-            adjacency_list_pub = nh.advertise<voronoi_msgs::AdjacencyList>("adjacency_list", 1, true);
-            node_info_pub = nh.advertise<voronoi_msgs::NodeInfoList>("node_info", 1, true);
-            all_paths_ind_pub = nh.advertise<voronoi_msgs::PathList>("all_paths", 1);
+            adjacency_list_pub = nh.advertise<voronoi_msgs_and_types::AdjacencyList>("adjacency_list", 1, true);
+            node_info_pub = nh.advertise<voronoi_msgs_and_types::NodeInfoList>("node_info", 1, true);
+            all_paths_ind_pub = nh.advertise<voronoi_msgs_and_types::PathList>("all_paths", 1);
 
             //Create timer to update Voronoi diagram, use one shot timer if update rate is 0
             if (update_voronoi_rate != 0)
@@ -280,7 +280,7 @@ namespace shared_voronoi_global_planner
                 all_paths_pub.publish(marker_array);
 
             //Publish all generated paths
-            voronoi_msgs::PathList path_list;
+            voronoi_msgs_and_types::PathList path_list;
             for (int i = 0; i < all_paths_meters.size(); ++i)
             {
                 nav_msgs::Path temp_path;

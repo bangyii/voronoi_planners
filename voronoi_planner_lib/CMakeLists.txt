@@ -9,6 +9,7 @@ project(voronoi_planner_lib)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  voronoi_msgs_and_types
 )
 
 find_package(OpenCV 3 REQUIRED)
@@ -104,7 +105,7 @@ find_package(OpenCV 3 REQUIRED)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
  INCLUDE_DIRS include
- LIBRARIES ${PROJECT_NAME} map graph_node
+ LIBRARIES ${PROJECT_NAME}
 #  CATKIN_DEPENDS roscpp
 #  DEPENDS system_lib
 )
@@ -128,14 +129,6 @@ include
 add_library(${PROJECT_NAME} src/voronoi_path.cpp)
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS})
-
-add_library(map include/voronoi_planner_lib/map.h)
-add_dependencies(map ${catkin_EXPORTED_TARGETS})
-set_target_properties(map PROPERTIES LINKER_LANGUAGE CXX)
-
-add_library(graph_node include/voronoi_planner_lib/graph_node.h)
-add_dependencies(graph_node ${catkin_EXPORTED_TARGETS})
-set_target_properties(graph_node PROPERTIES LINKER_LANGUAGE CXX)
 
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
@@ -179,7 +172,7 @@ set_target_properties(graph_node PROPERTIES LINKER_LANGUAGE CXX)
 
 ## Mark libraries for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
-install(TARGETS ${PROJECT_NAME} map graph_node
+install(TARGETS ${PROJECT_NAME}
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
