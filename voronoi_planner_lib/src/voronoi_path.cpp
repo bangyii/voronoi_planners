@@ -1,5 +1,5 @@
-#include <shared_voronoi_without_goal/voronoi_path.h>
-#include <shared_voronoi_without_goal/profiler.h>
+#include <voronoi_planner_lib/voronoi_path.h>
+#include <voronoi_planner_lib/profiler.h>
 #include <iostream>
 #include <algorithm>
 #include <exception>

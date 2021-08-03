@@ -11,8 +11,8 @@
 #define JCV_PI 3.141592653589793115997963468544185161590576171875
 
 #include "jc_voronoi_clip.h"
-#include <shared_voronoi_without_goal/graph_node.h>
-#include <shared_voronoi_without_goal/map.h>
+#include <voronoi_planner_lib/graph_node.h>
+#include <voronoi_planner_lib/map.h>
 #include <chrono>
 #include <limits>
 #include <cmath>

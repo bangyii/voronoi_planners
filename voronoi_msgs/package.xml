@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>shared_voronoi_without_goal</name>
+  <name>voronoi_msgs</name>
   <version>0.0.0</version>
-  <description>The shared_voronoi_without_goal package</description>
+  <description>The voronoi_msgs package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
@@ -19,7 +19,7 @@
   <!-- Url tags are optional, but multiple are allowed, one per tag -->
   <!-- Optional attribute type can be: website, bugtracker, or repository -->
   <!-- Example: -->
-  <!-- <url type="website">http://wiki.ros.org/shared_voronoi_without_goal</url> -->
+  <!-- <url type="website">http://wiki.ros.org/voronoi_msgs</url> -->
 
 
   <!-- Author tags are optional, multiple are allowed, one per tag -->
@@ -49,33 +49,14 @@
   <!-- Use doc_depend for packages you need only for building documentation: -->
   <!--   <doc_depend>doxygen</doc_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>geometry_msgs</build_depend>
-  <build_depend>map_msgs</build_depend>
+  <build_depend>message_generation</build_depend>
   <build_depend>nav_msgs</build_depend>
   <build_depend>roscpp</build_depend>
-  <build_depend>tf2</build_depend>
-  <build_depend>tf2_geometry_msgs</build_depend>
-  <build_depend>tf2_ros</build_depend>
-  <build_depend>visualization_msgs</build_depend>
-  <build_export_depend>geometry_msgs</build_export_depend>
-  <build_export_depend>map_msgs</build_export_depend>
   <build_export_depend>nav_msgs</build_export_depend>
   <build_export_depend>roscpp</build_export_depend>
-  <build_export_depend>tf2</build_export_depend>
-  <build_export_depend>tf2_geometry_msgs</build_export_depend>
-  <build_export_depend>tf2_ros</build_export_depend>
-  <build_export_depend>visualization_msgs</build_export_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>map_msgs</exec_depend>
+  <exec_depend>message_runtime</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>roscpp</exec_depend>
-  <exec_depend>tf2</exec_depend>
-  <exec_depend>tf2_geometry_msgs</exec_depend>
-  <exec_depend>tf2_ros</exec_depend>
-  <exec_depend>visualization_msgs</exec_depend>
-  <exec_depend>slam_toolbox</exec_depend>
-  <depend>voronoi_msgs</depend>
-  <depend>voronoi_planner_lib</depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

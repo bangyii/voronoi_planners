@@ -11,7 +11,7 @@
 #include <std_msgs/UInt32.h>
 #include <actionlib_msgs/GoalID.h>
 
-#include <shared_voronoi_without_goal/voronoi_path.h>
+#include <voronoi_planner_lib/voronoi_path.h>
 
 #include <chrono>
 

@@ -20,7 +20,8 @@ find_package(catkin REQUIRED COMPONENTS
   visualization_msgs
   actionlib_msgs
   tf2_ros
-  message_generation
+  voronoi_planner_lib
+  voronoi_msgs
 )
 
 find_package(OpenCV 3 REQUIRED)
@@ -59,16 +60,16 @@ find_package(OpenCV 3 REQUIRED)
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-add_message_files(
-  FILES
-  # AdjacencyNodes.msg
-  # NodeInfo.msg
-  # AdjacencyList.msg
-  # NodeInfoList.msg
-  # SortedNodeInfo.msg
-  # SortedNodesList.msg
-  PathList.msg
-)
+# add_message_files(
+#   FILES
+#   # AdjacencyNodes.msg
+#   # NodeInfo.msg
+#   # AdjacencyList.msg
+#   # NodeInfoList.msg
+#   # SortedNodeInfo.msg
+#   # SortedNodesList.msg
+#   PathList.msg
+# )
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -84,12 +85,12 @@ add_message_files(
 #   Action2.action
 # )
 
-## Generate added messages and services with any dependencies listed here
-generate_messages(
-  DEPENDENCIES
-  nav_msgs
-  std_msgs
-)
+# ## Generate added messages and services with any dependencies listed here
+# generate_messages(
+#   DEPENDENCIES
+#   nav_msgs
+#   std_msgs
+# )
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -122,8 +123,8 @@ generate_messages(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 INCLUDE_DIRS include
- LIBRARIES voronoi_path map graph_node
- CATKIN_DEPENDS nav_msgs roscpp message_runtime
+#  LIBRARIES voronoi_path
+ CATKIN_DEPENDS nav_msgs roscpp
 #  DEPENDS system_lib
 )
 
@@ -139,18 +140,17 @@ include
   ${OpenCV_INCLUDE_DIRS}
 )
 
+# add_library(voronoi_path src/voronoi_path.cpp)
+# add_dependencies(voronoi_path ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+# target_link_libraries(voronoi_path ${OpenCV_LIBS})
 
-add_library(voronoi_path src/voronoi_path.cpp)
-add_dependencies(voronoi_path ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(voronoi_path ${OpenCV_LIBS})
+# add_library(map include/shared_voronoi_without_goal/map.h)
+# add_dependencies(map ${catkin_EXPORTED_TARGETS})
+# set_target_properties(map PROPERTIES LINKER_LANGUAGE CXX)
 
-add_library(map include/shared_voronoi_without_goal/map.h)
-add_dependencies(map ${catkin_EXPORTED_TARGETS})
-set_target_properties(map PROPERTIES LINKER_LANGUAGE CXX)
-
-add_library(graph_node include/shared_voronoi_without_goal/graph_node.h)
-add_dependencies(graph_node ${catkin_EXPORTED_TARGETS})
-set_target_properties(graph_node PROPERTIES LINKER_LANGUAGE CXX)
+# add_library(graph_node include/shared_voronoi_without_goal/graph_node.h)
+# add_dependencies(graph_node ${catkin_EXPORTED_TARGETS})
+# set_target_properties(graph_node PROPERTIES LINKER_LANGUAGE CXX)
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}_lib
@@ -161,7 +161,7 @@ set_target_properties(graph_node PROPERTIES LINKER_LANGUAGE CXX)
 ## either from message generation or dynamic reconfigure
 add_executable(${PROJECT_NAME}_node src/shared_voronoi_without_goal_node.cpp)
 add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_node voronoi_path map graph_node ${catkin_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_node ${catkin_LIBRARIES} ${OpenCV_LIBS})
 
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
@@ -203,19 +203,19 @@ target_link_libraries(${PROJECT_NAME}_node voronoi_path map graph_node ${catkin_
 #   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 # )
 
-## Mark libraries for installation
-install(TARGETS voronoi_path map graph_node
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
-)
+# ## Mark libraries for installation
+# install(TARGETS voronoi_path map graph_node
+#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
+# )
 
-## Mark cpp header files for installation
-install(DIRECTORY include/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-  FILES_MATCHING PATTERN "*.h"
-  PATTERN ".svn" EXCLUDE
-)
+# ## Mark cpp header files for installation
+# install(DIRECTORY include/
+#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+#   FILES_MATCHING PATTERN "*.h"
+#   PATTERN ".svn" EXCLUDE
+# )
 
 #############
 ## Testing ##

@@ -1,27 +1,14 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(shared_voronoi_global_planner)
-
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+project(voronoi_planner_lib)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++11)
+# add_compile_options(-std=c++11)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  nav_msgs
   roscpp
-  geometry_msgs
-  nav_core
-  costmap_2d
-  tf2
-  tf2_geometry_msgs
-  visualization_msgs
-  actionlib_msgs
-  tf2_ros
-  voronoi_msgs
-  voronoi_planner_lib
 )
 
 find_package(OpenCV 3 REQUIRED)
@@ -62,6 +49,8 @@ find_package(OpenCV 3 REQUIRED)
 ## Generate messages in the 'msg' folder
 # add_message_files(
 #   FILES
+#   Message1.msg
+#   Message2.msg
 # )
 
 ## Generate services in the 'srv' folder
@@ -81,8 +70,7 @@ find_package(OpenCV 3 REQUIRED)
 ## Generate added messages and services with any dependencies listed here
 # generate_messages(
 #   DEPENDENCIES
-#   nav_msgs
-#   std_msgs
+#   std_msgs  # Or other packages containing msgs
 # )
 
 ################################################
@@ -115,9 +103,9 @@ find_package(OpenCV 3 REQUIRED)
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-INCLUDE_DIRS include
-#  LIBRARIES voronoi_path
- CATKIN_DEPENDS nav_msgs roscpp
+ INCLUDE_DIRS include
+ LIBRARIES ${PROJECT_NAME} map graph_node
+#  CATKIN_DEPENDS roscpp
 #  DEPENDS system_lib
 )
 
@@ -133,27 +121,26 @@ include
   ${OpenCV_INCLUDE_DIRS}
 )
 
-
-# add_library(voronoi_path_planner
-#   src/voronoi_path.cpp
-# )
-# add_dependencies(voronoi_path_planner ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-# target_link_libraries(voronoi_path_planner ${OpenCV_LIBS})
-
 ## Declare a C++ library
-add_library(${PROJECT_NAME}_lib
-  src/shared_voronoi_global_planner.cpp
-)
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
-add_dependencies(${PROJECT_NAME}_lib ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_lib ${catkin_LIBRARIES})
+add_library(${PROJECT_NAME} src/voronoi_path.cpp)
+add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS})
+
+add_library(map include/voronoi_planner_lib/map.h)
+add_dependencies(map ${catkin_EXPORTED_TARGETS})
+set_target_properties(map PROPERTIES LINKER_LANGUAGE CXX)
+
+add_library(graph_node include/voronoi_planner_lib/graph_node.h)
+add_dependencies(graph_node ${catkin_EXPORTED_TARGETS})
+set_target_properties(graph_node PROPERTIES LINKER_LANGUAGE CXX)
 
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-#add_executable(${PROJECT_NAME}_node src/shared_voronoi_global_planner_node.cpp)
+# add_executable(${PROJECT_NAME}_node src/voronoi_planner_lib_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -163,12 +150,12 @@ target_link_libraries(${PROJECT_NAME}_lib ${catkin_LIBRARIES})
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-#add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+# add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-#target_link_libraries(${PROJECT_NAME}_node
-  #${catkin_LIBRARIES}
-#)
+# target_link_libraries(${PROJECT_NAME}_node
+#   ${catkin_LIBRARIES}
+# )
 
 #############
 ## Install ##
@@ -192,14 +179,14 @@ target_link_libraries(${PROJECT_NAME}_lib ${catkin_LIBRARIES})
 
 ## Mark libraries for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
-install(TARGETS ${PROJECT_NAME}_lib
+install(TARGETS ${PROJECT_NAME} map graph_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
 )
 
 ## Mark cpp header files for installation
-install(DIRECTORY include/
+install(DIRECTORY include/${PROJECT_NAME}/
   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
   FILES_MATCHING PATTERN "*.h"
   PATTERN ".svn" EXCLUDE
@@ -217,7 +204,7 @@ install(DIRECTORY include/
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_shared_voronoi_global_planner.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_voronoi_planner_lib.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

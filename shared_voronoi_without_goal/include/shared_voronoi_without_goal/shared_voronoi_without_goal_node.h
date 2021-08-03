@@ -1,5 +1,5 @@
 #include <ros/ros.h>
-#include <shared_voronoi_without_goal/voronoi_path.h>
+#include <voronoi_planner_lib/voronoi_path.h>
 #include <tf2_ros/transform_listener.h>
 #include <string>
 #include <vector>

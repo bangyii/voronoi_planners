@@ -11,7 +11,7 @@
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 
-#include <shared_voronoi_without_goal/PathList.h>
+#include <voronoi_msgs/PathList.h>
 
 bool readParams(ros::NodeHandle &nh)
 {
@@ -333,7 +333,7 @@ void makePlan(const ros::WallTimerEvent &e)
 			all_paths_pub.publish(marker_array);
 
 		//Publish all generated paths
-		shared_voronoi_without_goal::PathList path_list;
+		voronoi_msgs::PathList path_list;
 		for (int i = 0; i < all_paths_meters.size(); ++i)
 		{
 			nav_msgs::Path temp_path;
@@ -391,7 +391,7 @@ int main(int argc, char **argv)
 	// adjacency_list_pub = nh.advertise<shared_voronoi_global_planner::AdjacencyList>("adjacency_list", 1, true);
 	// node_info_pub = nh.advertise<shared_voronoi_global_planner::NodeInfoList>("node_info", 1, true);
 	// sorted_nodes_pub = nh.advertise<shared_voronoi_global_planner::SortedNodesList>("sorted_nodes", 1, true);
-	all_paths_ind_pub = nh.advertise<shared_voronoi_without_goal::PathList>("all_paths", 1);
+	all_paths_ind_pub = nh.advertise<voronoi_msgs::PathList>("all_paths", 1);
 
 	//Create timer to update Voronoi diagram, use one shot timer if update rate is 0
 	if (planning_rate != 0)
