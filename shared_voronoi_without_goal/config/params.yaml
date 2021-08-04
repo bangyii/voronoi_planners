@@ -22,3 +22,16 @@ inflation_radius: 0.5
 inflation_blur_radius: 0.125
 base_link_frame: base_link
 debug_path_id: false
+robot_radius: 0.3
+use_elastic_band: false
+
+num_optim_iterations: 3
+max_recursion_depth_approx_equi: 4
+internal_force_gain: 1.0
+external_force_gain: 2.0
+tiny_bubble_distance: 0.01
+tiny_bubble_expansion: 0.01
+min_bubble_overlap: 0.7
+equilibrium_relative_overshoot: 0.75
+significant_force: 0.15
+costmap_weight: 10.0

@@ -45,3 +45,17 @@ bool publish_path_point_markers = false;
 double path_vertex_angle_threshold = 45;
 double path_vertex_dist_threshold = 0.8;
 std::string base_link_frame = "base_link";
+double robot_radius = 0.3;
+bool use_elastic_band = true;
+
+// Parameters for eband optimization
+int num_optim_iterations_ = 3; ///<@brief maximal number of iteration steps during optimization of band
+double internal_force_gain_ = 1.0; ///<@brief gain for internal forces ("Elasticity of Band")
+double external_force_gain_ = 2.0; ///<@brief gain for external forces ("Penalty on low distance to abstacles")
+double tiny_bubble_distance_ = 0.01; ///<@brief internal forces between two bubbles are only calc. if there distance is bigger than this lower bound
+double tiny_bubble_expansion_ = 0.01; ///<@brief lower bound for bubble expansion. below this bound bubble is considered as "in collision"
+double min_bubble_overlap_ = 0.9; ///<@brief minimum relative overlap two bubbles must have to be treated as connected
+int max_recursion_depth_approx_equi_ = 4; ///@brief maximum depth for recursive approximation to constrain computational burden
+double equilibrium_relative_overshoot_ = 0.75; ///@brief percentage of old force for which a new force is considered significant when higher as this value
+double significant_force_ = 0.15; ///@brief lower bound for absolute value of force below which it is treated as insignificant (no recursive approximation)
+double costmap_weight_ = 10.0; // the costmap weight or scaling factor

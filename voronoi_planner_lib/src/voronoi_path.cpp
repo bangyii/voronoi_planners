@@ -10,7 +10,7 @@
 
 namespace voronoi_path
 {
-    VoronoiPath::VoronoiPath()
+    VoronoiPath::VoronoiPath() : ebo(map_ptr)
     {
     }
 
@@ -23,6 +23,20 @@ namespace voronoi_path
     {
         static uint32_t id = 1;
         return id++;
+    }
+
+    void VoronoiPath::updateEBandParams()
+    {
+        ebo.num_optim_iterations_ = num_optim_iterations_;
+        ebo.internal_force_gain_ = internal_force_gain_;
+        ebo.external_force_gain_ = external_force_gain_;
+        ebo.tiny_bubble_distance_ = tiny_bubble_distance_;
+        ebo.tiny_bubble_expansion_ = tiny_bubble_expansion_;
+        ebo.min_bubble_overlap_ = min_bubble_overlap_;
+        ebo.max_recursion_depth_approx_equi_ = max_recursion_depth_approx_equi_;
+        ebo.equilibrium_relative_overshoot_ = equilibrium_relative_overshoot_;
+        ebo.significant_force_ = significant_force_;
+        ebo.costmap_weight_ = costmap_weight_;
     }
 
     std::vector<std::complex<double>> VoronoiPath::findObstacleCentroids()
@@ -256,6 +270,7 @@ namespace voronoi_path
 
     bool VoronoiPath::edgesToAdjacency(const std::vector<const jcv_edge *> &edge_vector)
     {
+        Profiler complete_profiler, section_profiler;
         //Reset all variables
         adj_list.clear();
         node_inf.clear();
@@ -295,6 +310,9 @@ namespace voronoi_path
             }
         }
 
+        if(print_timings)
+            section_profiler.print("edgesToAdjacency hash time");
+
         //Connect single edges to nearby node if <= node_connection_threshold_pix pixel distance
         std::vector<int> unconnected_nodes;
         int threshold = pow(node_connection_threshold_pix, 2);
@@ -316,7 +334,7 @@ namespace voronoi_path
                         adj_list[node_num].push_back(j);
                         adj_list[j].push_back(node_num);
 
-                        //TODO: Check if this connection creates a cycle within N nodes threshold
+                        //Check if this connection creates a cycle within N nodes threshold
                         std::vector<int> visited_list;
                         if(hasCycle(node_num, 0, visited_list))
                         {
@@ -334,14 +352,23 @@ namespace voronoi_path
             }
         }
 
+        if(print_timings)
+            section_profiler.print("edgesToAdjacency connect single nodes time");
+
         //Loop through all nodes that were unable to be connected for trimming
         auto new_adj_list = adj_list;
         double thresh = sqrt(lonely_branch_dist_threshold) / map_ptr->resolution;
         for(const auto &node_num : unconnected_nodes)
             removeExcessBranch(new_adj_list, thresh, node_num);
 
+        if(print_timings)
+            section_profiler.print("edgesToAdjacency remove excess branch time");
+
         adj_list = std::move(new_adj_list);
         num_nodes = adj_list.size();
+
+        if(print_timings)
+            complete_profiler.print("edgesToAdjacency total time");
         return true;
     }
     
@@ -476,10 +503,49 @@ namespace voronoi_path
     {
         //Increase resolution of paths by interpolation before contracting to give smoother result
         interpolatePaths(paths, path_waypoint_sep);
-        for (auto &path : paths)
+        if(!use_elastic_band)
         {
-            contractPath(path.path);
-            findStuckVertex(path.path);
+            for (auto &path : paths)
+            {
+                contractPath(path.path);
+
+                if(!backtrack_paths)
+                    findStuckVertex(path.path);
+            }
+        }
+
+        //Use eband
+        else
+        {
+            for (int i = 0; i < paths.size(); ++i)
+            {
+                std::vector<geometry_msgs::PoseStamped> global_plan;
+                std::vector<GraphNode> new_path;
+
+                //Convert to map frame plan
+                for(const auto &pose : paths[i].path)
+                {
+                    geometry_msgs::PoseStamped new_pose;
+                    new_pose.header.frame_id = map_ptr->frame_id;
+                    map_ptr->mapToWorld(pose.x, pose.y, new_pose.pose.position.x, new_pose.pose.position.y);
+                    new_pose.pose.orientation.w = 1.0;
+                    global_plan.push_back(std::move(new_pose));
+                }
+
+                map_ptr->robot_radius = robot_radius;
+                ebo.setPlan(global_plan, map_ptr);
+                ebo.optimizeBand();
+                ebo.getPlan(global_plan);
+
+                for(const auto &pose : global_plan)
+                {
+                    GraphNode new_node;
+                    map_ptr->worldToMap(pose.pose.position.x, pose.pose.position.y, new_node.x, new_node.y);
+                    new_path.push_back(std::move(new_node));
+                }
+
+                paths[i].path = std::move(new_path);
+            }
         }
 
         return true;
@@ -838,10 +904,12 @@ namespace voronoi_path
     {
         //Block until voronoi is no longer being updated. Prevents issue where planning is done using an empty adjacency list
         std::lock_guard<std::mutex> lock(voronoi_mtx);
+        Profiler complete_profiler, section_profiler;
         
         //Compensate previous path's map origin
         if(prev_map.frame_id != "")
         {
+            backtrack_paths = true;
             double prev_origin_x = prev_map.origin.position.x / prev_map.resolution;
             double prev_origin_y = prev_map.origin.position.y / prev_map.resolution;
             double cur_origin_x = map_ptr->origin.position.x / map_ptr->resolution;
@@ -857,6 +925,9 @@ namespace voronoi_path
             }
         }
 
+        if(print_timings)
+            section_profiler.print("backtrackPlan offset previous timestep path");
+
         //Update previous map information
         prev_map.frame_id = map_ptr->frame_id;
         prev_map.origin.position.x = map_ptr->origin.position.x;
@@ -871,10 +942,16 @@ namespace voronoi_path
         if (!getNearestNode(start, start, start_node, start_node))
             return std::vector<Path>();
 
+        if(print_timings)
+            section_profiler.print("backtrackPlan getNearestNode");
+
         //Run exhaustive traversal of connected nodes until termination condition is met
         //Termination condition is distance threshold reached
         std::vector<int> path;
         backtrack(path, 0, 0, -1, start_node, paths, backtrack_plan_threshold / map_ptr->resolution);
+
+        if(print_timings)
+            section_profiler.print("backtrackPlan recursive backtrack");
 
         //Convert to pixel paths
         std::vector<Path> all_path_nodes;
@@ -888,6 +965,9 @@ namespace voronoi_path
         }
 
         interpolateContractPaths(all_path_nodes);
+
+        if(print_timings)
+            section_profiler.print("backtrackPlan interpolate and contract");
 
         std::vector<int> remove_ind;
         auto prev_path_headings = getPathHeadings(previous_paths);
@@ -996,6 +1076,9 @@ namespace voronoi_path
 
         } while(!remove_ind.empty());
 
+        if(print_timings)
+            section_profiler.print("backtrackPlan check unique");
+
         //If there were no previous paths, then just accept these paths and return
         if(!hasPreviousPaths())
             previous_paths = all_path_nodes;
@@ -1007,6 +1090,8 @@ namespace voronoi_path
             previous_paths = all_path_nodes;
         }
 
+        if(print_timings)
+            complete_profiler.print("backtrackPlan total time");
         return all_path_nodes;
     }
 
@@ -1018,6 +1103,7 @@ namespace voronoi_path
     std::vector<Path> VoronoiPath::linkBacktrackPaths(std::vector<Path> &prev_paths, std::vector<Path> &cur_paths)
     {
         //Compare paths within a certain heading +- range from current path's heading
+        Profiler complete_profiler;
         auto prev_path_headings = getPathHeadings(prev_paths);
         auto cur_path_headings = getPathHeadings(cur_paths);
         std::vector<Path> viz_paths = cur_paths;
@@ -1086,6 +1172,9 @@ namespace voronoi_path
                 std::cout << "Path " << i << " is distinct\n";
         }
 
+        if(print_timings)
+            complete_profiler.print("linkBacktrackPaths total time");
+
         return viz_paths;
     }
 
@@ -1097,6 +1186,7 @@ namespace voronoi_path
 
         Profiler complete_profiler, section_profiler;
         std::vector<Path> path;
+        backtrack_paths = false;
 
         //Find nearest node to starting and end positions
         int start_node, end_node;
@@ -1186,6 +1276,7 @@ namespace voronoi_path
         /********** TRIMMING OR EXTENSION OF PATHS FOUND IN PREVIOUS TIME STEP **********/
         //Add robot's current position to the first pose of the replanned_paths
         bool found_new_start = false;
+        backtrack_paths = false;
         std::vector<Path> replanned_paths(previous_paths);
         for (int i = 0; i < replanned_paths.size(); ++i)
         {

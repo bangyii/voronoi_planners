@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(voronoi_planner_lib)
+project(eband_optimizer)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -9,12 +9,17 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  roscpp
   voronoi_msgs_and_types
-  eband_optimizer
+  dynamic_reconfigure
+  geometry_msgs
+  nav_msgs
+  roscpp
+  tf2_eigen
+  tf2_geometry_msgs
+  tf2_ros
 )
 
-find_package(OpenCV 3 REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -73,7 +78,7 @@ find_package(OpenCV 3 REQUIRED)
 ## Generate added messages and services with any dependencies listed here
 # generate_messages(
 #   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
+#   geomerty_msgs#   nav_msgs#   tf2_geometry_msgs
 # )
 
 ################################################
@@ -108,7 +113,7 @@ find_package(OpenCV 3 REQUIRED)
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES ${PROJECT_NAME}
- CATKIN_DEPENDS roscpp eband_optimizer
+ CATKIN_DEPENDS nav_msgs roscpp tf2_eigen tf2_geometry_msgs tf2_ros
 #  DEPENDS system_lib
 )
 
@@ -120,22 +125,27 @@ catkin_package(
 ## Your package locations should be listed before other locations
 include_directories(
 include
+${Eigen3_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
-  ${OpenCV_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
+add_library(${PROJECT_NAME}
+  src/eband_optimizer.cpp
+  src/conversions_and_types.cpp
+  src/eband_visualization.cpp
+)
+
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
-add_library(${PROJECT_NAME} src/voronoi_path.cpp)
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS})
+target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
 
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/voronoi_planner_lib_node.cpp)
+# add_executable(${PROJECT_NAME}_node src/eband_optimizer_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -199,7 +209,7 @@ install(DIRECTORY include/${PROJECT_NAME}/
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_voronoi_planner_lib.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_eband_optimizer.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

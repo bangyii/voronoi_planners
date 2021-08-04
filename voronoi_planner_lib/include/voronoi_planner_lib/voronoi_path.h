@@ -13,6 +13,7 @@
 #include "jc_voronoi_clip.h"
 #include <voronoi_msgs_and_types/graph_node.h>
 #include <voronoi_msgs_and_types/map.h>
+#include <eband_optimizer/eband_optimizer.h>
 #include <chrono>
 #include <limits>
 #include <cmath>
@@ -72,6 +73,8 @@ namespace voronoi_path
          * @return boolean indicating success
          **/
         bool getEdges(std::vector<GraphNode> &edges);
+
+        eband_optimizer::EBandOptimizer ebo;
 
         /**
          * Get nodes which are singly connected (only has 1 edge connected to it)
@@ -177,6 +180,8 @@ namespace voronoi_path
          **/
         std::vector<Path> getVizPaths();
 
+        void updateEBandParams();
+
         /**
          * Pixel resolution to increment when checking if an edge collision occurs. Value of 0.1 means the edge will
          * be checked at every 0.1 pixel intervals
@@ -273,6 +278,28 @@ namespace voronoi_path
          **/
         double last_branch_dist_thresh = 2.5;
 
+        /**
+         * Param for whether or not to use elastic band for path smoothing/contraction
+         **/
+        bool use_elastic_band = true;
+
+        /**
+         * Robot radius required for elastic band path smoothing
+         **/
+        double robot_radius = 0.3;
+
+        // Parameters for eband optimization
+        int num_optim_iterations_ = 3; ///<@brief maximal number of iteration steps during optimization of band
+        double internal_force_gain_ = 1.0; ///<@brief gain for internal forces ("Elasticity of Band")
+        double external_force_gain_ = 2.0; ///<@brief gain for external forces ("Penalty on low distance to abstacles")
+        double tiny_bubble_distance_ = 0.01; ///<@brief internal forces between two bubbles are only calc. if there distance is bigger than this lower bound
+        double tiny_bubble_expansion_ = 0.01; ///<@brief lower bound for bubble expansion. below this bound bubble is considered as "in collision"
+        double min_bubble_overlap_ = 0.9; ///<@brief minimum relative overlap two bubbles must have to be treated as connected
+        int max_recursion_depth_approx_equi_ = 4; ///@brief maximum depth for recursive approximation to constrain computational burden
+        double equilibrium_relative_overshoot_ = 0.75; ///@brief percentage of old force for which a new force is considered significant when higher as this value
+        double significant_force_ = 0.15; ///@brief lower bound for absolute value of force below which it is treated as insignificant (no recursive approximation)
+        double costmap_weight_ = 10.0; // the costmap weight or scaling factor
+
     private:
         /**
          * Pointer to map from the ROS side of planner
@@ -357,6 +384,11 @@ namespace voronoi_path
          * Vector storing all the costs of previous paths
          **/
         std::vector<double> previous_path_costs;
+
+        /**
+         * Flag to indicate whether paths were received from backtrackPlan or getPath
+         **/
+        bool backtrack_paths = false;
 
         //******************* Methods *******************/
 

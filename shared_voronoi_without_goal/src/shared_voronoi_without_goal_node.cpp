@@ -39,6 +39,8 @@ bool readParams(ros::NodeHandle &nh)
 	nh.getParam("inflation_radius", inflation_radius);
 	nh.getParam("inflation_blur_radius", inflation_blur_radius);
 	nh.getParam("publish_viz_paths", publish_viz_paths);
+	nh.getParam("robot_radius", robot_radius);
+	nh.getParam("use_elastic_band", use_elastic_band);
 
 	//Set parameters for voronoi path object
 	v_path.h_class_threshold = h_class_threshold;
@@ -52,6 +54,30 @@ bool readParams(ros::NodeHandle &nh)
 	v_path.lonely_branch_dist_threshold = lonely_branch_dist_threshold;
 	v_path.path_waypoint_sep = path_waypoint_sep;
 	v_path.path_vertex_angle_threshold = path_vertex_angle_threshold;
+	v_path.use_elastic_band = use_elastic_band;
+
+	//Elasitc band params
+        nh.getParam("num_optim_iterations", num_optim_iterations_);
+	nh.getParam("max_recursion_depth_approx_equi", max_recursion_depth_approx_equi_); 
+        nh.getParam("internal_force_gain", internal_force_gain_); 
+        nh.getParam("external_force_gain", external_force_gain_); 
+        nh.getParam("tiny_bubble_distance", tiny_bubble_distance_); 
+        nh.getParam("tiny_bubble_expansion", tiny_bubble_expansion_); 
+        nh.getParam("min_bubble_overlap", min_bubble_overlap_); 
+        nh.getParam("equilibrium_relative_overshoot", equilibrium_relative_overshoot_); 
+        nh.getParam("significant_force", significant_force_); 
+        nh.getParam("costmap_weight", costmap_weight_); 
+        v_path.num_optim_iterations_ = num_optim_iterations_;
+        v_path.internal_force_gain_ = internal_force_gain_;
+        v_path.external_force_gain_ = external_force_gain_;
+        v_path.tiny_bubble_distance_ = tiny_bubble_distance_;
+        v_path.tiny_bubble_expansion_ = tiny_bubble_expansion_;
+        v_path.min_bubble_overlap_ = min_bubble_overlap_;
+        v_path.max_recursion_depth_approx_equi_ = max_recursion_depth_approx_equi_;
+        v_path.equilibrium_relative_overshoot_ = equilibrium_relative_overshoot_;
+        v_path.significant_force_ = significant_force_;
+        v_path.costmap_weight_ = costmap_weight_;
+	v_path.updateEBandParams();
 }
 
 void publishVoronoiViz()
@@ -201,7 +227,7 @@ void makePlan(const ros::WallTimerEvent &e)
 	geometry_msgs::Pose robot_pose;
 	try
 	{
-		base_link_to_map_tf = tf_buffer.lookupTransform(map.frame_id, base_link_frame, ros::Time(0), ros::Duration(0.5));
+		base_link_to_map_tf = tf_buffer.lookupTransform(map.frame_id, base_link_frame, ros::Time(0), ros::Duration(1.0/planning_rate));
 		tf2::doTransform<geometry_msgs::Pose>(robot_pose, robot_pose, base_link_to_map_tf);
 	}
 	catch (tf2::TransformException &Exception)
@@ -299,11 +325,11 @@ void makePlan(const ros::WallTimerEvent &e)
 				//TODO: Set orientation of intermediate poses
 				new_pose.pose.orientation.w = 1;
 
-				all_paths_meters[i].push_back(new_pose);
-
 				//Add path number halfway through the path
 				if (k == all_paths[i].path.size() / 2)
 					path_number.pose = new_pose.pose;
+
+				all_paths_meters[i].push_back(std::move(new_pose));
 
 				if (publish_all_path_markers)
 				{
