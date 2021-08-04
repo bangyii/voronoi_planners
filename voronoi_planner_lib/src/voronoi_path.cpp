@@ -1,5 +1,7 @@
 #include <voronoi_planner_lib/voronoi_path.h>
 #include <voronoi_planner_lib/profiler.h>
+#include <voronoi_planner_lib/kdtree.h>
+#include <voronoi_planner_lib/kdtree_point.h>
 #include <iostream>
 #include <algorithm>
 #include <exception>
@@ -276,6 +278,7 @@ namespace voronoi_path
         node_inf.clear();
 
         std::unordered_map<uint32_t, int> hash_index_map;
+        std::vector<kdt::KDTreePoint> kdt_points;
         for (int i = 0; i < edge_vector.size(); ++i)
         {
             //Get hash for both vertices of the current edge
@@ -295,10 +298,16 @@ namespace voronoi_path
                 //Node doesn't exist, add new node to adjacency list & info vector, and respective hash and node index to map
                 else
                 {
-                    node_index[j] = adj_list.size();
+                    node_index[j] = hash_index_map.size();
+                    hash_index_map.insert(std::pair<uint32_t, int>(hash_vec[j], node_index[j]));
                     node_inf.emplace_back(edge_vector[i]->pos[j].x, edge_vector[i]->pos[j].y);
                     adj_list.push_back(std::vector<int>());
-                    hash_index_map.insert(std::pair<uint32_t, int>(hash_vec[j], node_index[j]));
+
+                    kdt::KDTreePoint new_point;
+                    new_point[0] = edge_vector[i]->pos[j].x;
+                    new_point[1] = edge_vector[i]->pos[j].y;
+                    new_point.index = node_index[j];
+                    kdt_points.emplace_back(std::move(new_point));
                 }
             }
 
@@ -310,8 +319,13 @@ namespace voronoi_path
             }
         }
 
-        if(print_timings)
+        if (print_timings)
             section_profiler.print("edgesToAdjacency hash time");
+
+        //Build KD tree
+        kdt::KDTree<kdt::KDTreePoint> kdt(kdt_points);
+        if (print_timings)
+            section_profiler.print("edgesToAdjacency construct kdt time");
 
         //Connect single edges to nearby node if <= node_connection_threshold_pix pixel distance
         std::vector<int> unconnected_nodes;
@@ -321,34 +335,45 @@ namespace voronoi_path
             //Singly connected node
             if (adj_list[node_num].size() == 1)
             {
+                //Radius search with kdt to find nearby nodes to connect to
+                kdt::KDTreePoint cur_point;
+                cur_point[0] = node_inf[node_num].x;
+                cur_point[1] = node_inf[node_num].y;
+                auto radius_neighbors = kdt.radiusSearch(cur_point, 1.1 * threshold);
+
                 //Check through all node_inf to see if there are any within distance threshold
-                for (int j = 0; j < node_inf.size(); ++j)
+                bool connected = false;
+                for(const auto &nb : radius_neighbors)
                 {
-                    //If the node being checked is itself or is already connected to the checked node, new_adj_list[i] only has 1 element
-                    if (j == node_num || adj_list[node_num].back() == j)
+                    int candidate_node_num = kdt_points[nb].index;
+
+                    //Do not connect with self, or do no connect with neighbor if already connected
+                    if(candidate_node_num == node_num || adj_list[node_num].back() == candidate_node_num)
                         continue;
 
-                    double dist = pow(node_inf[j].x - node_inf[node_num].x, 2) + pow(node_inf[j].y - node_inf[node_num].y, 2);
+                    double dist = pow(node_inf[candidate_node_num].x - node_inf[node_num].x, 2) + pow(node_inf[candidate_node_num].y - node_inf[node_num].y, 2);
+
                     if (dist <= threshold)
                     {
-                        adj_list[node_num].push_back(j);
-                        adj_list[j].push_back(node_num);
+                        adj_list[node_num].push_back(candidate_node_num);
+                        adj_list[candidate_node_num].push_back(node_num);
 
                         //Check if this connection creates a cycle within N nodes threshold
                         std::vector<int> visited_list;
                         if(hasCycle(node_num, 0, visited_list))
                         {
                             adj_list[node_num].pop_back();
-                            adj_list[j].pop_back();
+                            adj_list[candidate_node_num].pop_back();
                         }
 
+                        connected = true;
                         break;
                     }
-
-                    //Remember nodes that were unconnected to trim later
-                    if(j == node_inf.size() - 1)
-                        unconnected_nodes.push_back(node_num);
                 }
+
+                //Remember nodes that were unconnected even after exhaustive search for branch trimming later
+                if(!connected)
+                    unconnected_nodes.push_back(node_num);
             }
         }
 
