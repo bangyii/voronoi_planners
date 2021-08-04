@@ -303,9 +303,7 @@ namespace voronoi_path
                     node_inf.emplace_back(edge_vector[i]->pos[j].x, edge_vector[i]->pos[j].y);
                     adj_list.push_back(std::vector<int>());
 
-                    kdt::KDTreePoint new_point;
-                    new_point[0] = edge_vector[i]->pos[j].x;
-                    new_point[1] = edge_vector[i]->pos[j].y;
+                    kdt::KDTreePoint new_point(edge_vector[i]->pos[j].x, edge_vector[i]->pos[j].y);
                     new_point.index = node_index[j];
                     kdt_points.emplace_back(std::move(new_point));
                 }
@@ -336,9 +334,7 @@ namespace voronoi_path
             if (adj_list[node_num].size() == 1)
             {
                 //Radius search with kdt to find nearby nodes to connect to
-                kdt::KDTreePoint cur_point;
-                cur_point[0] = node_inf[node_num].x;
-                cur_point[1] = node_inf[node_num].y;
+                kdt::KDTreePoint cur_point(node_inf[node_num].x, node_inf[node_num].y);
                 auto radius_neighbors = kdt.radiusSearch(cur_point, 1.1 * threshold);
 
                 //Check through all node_inf to see if there are any within distance threshold
