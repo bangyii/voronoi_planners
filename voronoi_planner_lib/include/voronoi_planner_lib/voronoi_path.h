@@ -634,6 +634,16 @@ namespace voronoi_path
          * @param backtrack_plan_threshold distance from start position to terminate the dfs planning
          **/
         void backtrack(std::vector<int> &path, double cur_dist, double last_branch_dist, const int &prev_node, const int &cur_node, std::vector<std::vector<int>> &paths, const double &backtrack_plan_threshold);
+
+        /**
+         * Get minimum angle difference between 2 given angles. Output is between -PI & PI
+         * Equation is angle1 - angle2
+         * @param angle1 first angle
+         * @param angle2 second angle
+         * @param rad default true to indicate angle1 and angle2 are radians. Result will also be radians. Set false to use degrees
+         * @return minimum angle difference in radians if rad = true
+         **/
+        double getMinAngleDiff(const double &angle1, const double &angle2, bool rad=true);
     };
 
 } // namespace voronoi_path

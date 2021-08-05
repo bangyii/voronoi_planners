@@ -29,6 +29,7 @@ double line_check_resolution = 0.1;
 double inflation_radius = 0.5;
 double inflation_blur_radius = 0.125;
 bool publish_viz_paths = false;
+bool publish_path_names = true;
 int pixels_to_skip = 0;
 double open_cv_scale = 0.5;
 double h_class_threshold = 0.01;

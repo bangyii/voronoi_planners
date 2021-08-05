@@ -826,6 +826,22 @@ namespace voronoi_path
         return;
     }
 
+    double VoronoiPath::getMinAngleDiff(const double &angle1, const double &angle2, bool rad)
+    {
+        double val = M_PI;
+        if(!rad)
+            val = 180.0;
+
+        double angle_diff = angle1 - angle2;
+        if(angle_diff > val || angle_diff < -val)
+        {
+            int sign = angle_diff / fabs(angle_diff);
+            angle_diff = -sign * 2 * val + angle_diff;
+        }
+
+        return angle_diff;
+    }
+
     bool VoronoiPath::isBacktrackDistinct(std::vector<Path>::iterator &path1, std::vector<Path>::iterator &path2)
     {
         //Interpolate from path 1 endpoint to path 2 endpoint
@@ -833,12 +849,13 @@ namespace voronoi_path
         GraphNode vec1 = path1->path.back() - start;
         GraphNode vec2 = path2->path.back() - start;
         double mag_diff = vec2.getMagnitude() - vec1.getMagnitude();
-        double angle_diff = atan2(vec2.y, vec2.x) - atan2(vec1.y, vec1.x);
-        if(angle_diff > M_PI || angle_diff < -M_PI)
-        {
-            int sign = angle_diff / fabs(angle_diff);
-            angle_diff = -sign * M_PI + angle_diff;
-        }
+        double angle_diff = getMinAngleDiff(atan2(vec2.y, vec2.x), atan2(vec1.y, vec1.x));
+        // double angle_diff = atan2(vec2.y, vec2.x) - atan2(vec1.y, vec1.x);
+        // if(angle_diff > M_PI || angle_diff < -M_PI)
+        // {
+        //     int sign = angle_diff / fabs(angle_diff);
+        //     angle_diff = -sign * 2 * M_PI + angle_diff;
+        // }
 
         //TODO: Handle this properly, magnitude may be different
         // else if(fabs(angle_diff) < 0.005)
@@ -899,12 +916,7 @@ namespace voronoi_path
                 double cur_angle = atan2(vec.y, vec.x);
 
                 //Use angle difference to get average to prevent wrap around effect. ie a zigzag path around the 0/360 deg line will give average of 180
-                double angle_diff = cur_angle - prev_angle;
-                if(angle_diff > M_PI || angle_diff < -M_PI)
-                {
-                    int sign = angle_diff / fabs(angle_diff);
-                    angle_diff = -sign * 2 * M_PI + angle_diff;
-                }
+                double angle_diff = getMinAngleDiff(cur_angle, prev_angle);
 
                 angle_sum += (prev_angle + angle_diff);
                 prev_angle += angle_diff;
@@ -1027,14 +1039,7 @@ namespace voronoi_path
                 bool distinct = false;
                 int path1_ind = std::distance(all_path_nodes.begin(), path1);
                 int path2_ind = std::distance(all_path_nodes.begin(), path2);
-                double heading_diff = sorted_average_headings[path1_ind] - sorted_average_headings[path2_ind];
-                if(heading_diff > 180 || heading_diff < -180)
-                {
-                    int sign = -heading_diff / fabs(heading_diff);
-                    heading_diff = sign * 360 + heading_diff;
-                }
-
-                //If headings greater than threshold, then distinct, otherwise check using interpolation and homotopy
+                double heading_diff = getMinAngleDiff(sorted_average_headings[path1_ind], sorted_average_headings[path2_ind], false);                //If headings greater than threshold, then distinct, otherwise check using interpolation and homotopy
                 if(fabs(heading_diff) < 30 && !isBacktrackDistinct(path1, path2))
                 {
                     //Path removal should favor the path that has close relative in previous time step to prevent oscillation
@@ -1129,68 +1134,73 @@ namespace voronoi_path
         auto cur_path_headings = getPathHeadings(cur_paths);
         std::vector<Path> viz_paths = cur_paths;
 
-        //<int, double> = <path index, average heading>
+        //Vector to keep track which paths in this new time step are still distinct
+        std::vector<bool> cur_paths_distinct(cur_path_headings.size(), true);
+
+        //Generate vector of pairs and their angle differences, sort ascending to make important comparisons first to prevent path id stealing
+        std::vector<std::pair<double, std::pair<int, int>>> diff_id_pair;
         for(int i = 0; i < cur_path_headings.size(); ++i)
         {
-            auto cur_path = cur_paths.begin() + cur_path_headings[i].second;
             double cur_heading = cur_path_headings[i].first;
 
-            //Duplicate prev_path_headings and then offset by cur_path, then sort. Compare smallest angle ones first
-            auto prev_headings_copy = prev_path_headings;
-            for(auto &heading : prev_headings_copy)
+            for(int j = 0; j < prev_path_headings.size(); ++j)
             {
-                double old_heading = heading.first;
-                heading.first -= cur_heading;
-                if(heading.first > 180 || heading.first < -180)
-                {
-                    int sign = -heading.first/fabs(heading.first);
-                    heading.first = sign * 360 + heading.first;
-                }
+                double prev_heading = prev_path_headings[j].first;
+                double angle_diff = getMinAngleDiff(prev_heading, cur_heading, false);
+                angle_diff = fabs(angle_diff);
 
-                heading.first = fabs(heading.first);
+                //Only add into comparison list if less than threshold
+                if(angle_diff < 30.0)
+                    diff_id_pair.emplace_back(std::make_pair(angle_diff, std::make_pair(i, j)));
             }
-            std::sort(prev_headings_copy.begin(), prev_headings_copy.end());
-            
-            //Compare starting from smallest absolute angle difference, increase likelihood of comparing with actual predecessor
-            bool distinct = true;
-            for(int j = 0; j < prev_headings_copy.size(); ++j)
+        }
+
+        //Sort the angle differences accordingly
+        std::sort(diff_id_pair.begin(), diff_id_pair.end(),
+                  [](std::pair<double, std::pair<int, int>> &a, std::pair<double, std::pair<int, int>> &b)
+                  {
+                      return a.first < b.first;
+                  });
+
+        //Do comparisons in ascending order of angle difference
+        for (int i = 0; i < diff_id_pair.size(); ++i)
+        {
+            int cur_path_idx = diff_id_pair[i].second.first;
+            auto cur_path = cur_paths.begin() + cur_path_idx;
+            auto prev_path = prev_paths.begin() + diff_id_pair[i].second.second;
+
+            //Check if prev_path collides with obstacles in this map frame
+            bool collides = false;
+            for (int k = 1; k < prev_path->path.size(); ++k)
             {
-                auto prev_path = prev_paths.begin() + prev_headings_copy[j].second;
-                double heading_diff = prev_headings_copy[j].first;
-
-                if(fabs(heading_diff) < 30)
+                if (edgeCollides(prev_path->path[k - 1], prev_path->path[k], occupancy_threshold))
                 {
-                    //Check if prev_path collides with obstacles in this map frame
-                    bool collides = false;
-                    for(int k = 1; k < prev_path->path.size(); ++k)
-                    {
-                        if(edgeCollides(prev_path->path[k-1], prev_path->path[k], occupancy_threshold))
-                        {
-                            std::cout << "Path " << i << " collides\n";
-                            collides = true;
-                            break;
-                        }
-                    }
-
-                    //Not distinct, assign current id to previous id if previous id is still valid
-                    if(!collides && prev_path->id != 0 && !isBacktrackDistinct(cur_path, prev_path))
-                    {
-                        cur_path->id = prev_path->id;
-                        prev_path->id = 0;
-                        distinct = false;
-                        
-                        //For visualization
-                        viz_paths[i].path.insert(viz_paths[i].path.end(), prev_path->path.rbegin(), prev_path->path.rend());
-
-                        //Only do 1 comparison per path
-                        //TODO: Robustify this
-                        break;
-                    }
+                    std::cout << "Path " << cur_path->id << " collides\n";
+                    collides = true;
+                    break;
                 }
             }
 
-            if(distinct)
-                std::cout << "Path " << i << " is distinct\n";
+            //If path is still distinct, continue checking
+            if (cur_paths_distinct[cur_path_idx] && !collides && prev_path->id != 0 && !isBacktrackDistinct(cur_path, prev_path))
+            {
+                //Not distinct, assign current id to previous id if previous id is still valid
+                cur_path->id = prev_path->id;
+                prev_path->id = 0;
+
+                //Only do 1 comparison per path
+                cur_paths_distinct[cur_path_idx] = false;
+
+                //For visualization
+                viz_paths[cur_path_idx].path.insert(viz_paths[cur_path_idx].path.end(), prev_path->path.rbegin(), prev_path->path.rend());
+            }
+        }
+
+        //For logging
+        for (int i = 0; i < cur_paths_distinct.size(); ++i)
+        {
+            if (cur_paths_distinct[i])
+                std::cout << "Path " << cur_paths[i].id << " is distinct\n";
         }
 
         if(print_timings)

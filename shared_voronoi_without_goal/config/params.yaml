@@ -1,6 +1,7 @@
 occupancy_threshold: 99
 planning_rate: 10
 publish_viz_paths: false
+publish_path_names: true
 print_timings: false
 line_check_resolution: 0.1
 pixels_to_skip: 0

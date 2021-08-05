@@ -41,6 +41,7 @@ bool readParams(ros::NodeHandle &nh)
 	nh.getParam("publish_viz_paths", publish_viz_paths);
 	nh.getParam("robot_radius", robot_radius);
 	nh.getParam("use_elastic_band", use_elastic_band);
+	nh.getParam("publish_path_names", publish_path_names);
 
 	//Set parameters for voronoi path object
 	v_path.h_class_threshold = h_class_threshold;
@@ -295,7 +296,7 @@ void makePlan(const ros::WallTimerEvent &e)
 				path_number.color.b = 0.0;
 				path_number.color.a = 1.0;
 				path_number.lifetime = ros::Duration(marker_lifetime);
-				path_number.text = "Path " + std::to_string(i);
+				path_number.text = "Path " + std::to_string(all_paths[i].id);
 
 				if (publish_path_point_markers)
 				{
@@ -343,7 +344,9 @@ void makePlan(const ros::WallTimerEvent &e)
 			if (publish_all_path_markers)
 			{
 				marker_array.markers.push_back(marker);
-				marker_array.markers.push_back(path_number);
+
+				if(publish_path_names)
+					marker_array.markers.push_back(path_number);
 
 				if (publish_path_point_markers)
 					marker_array.markers.push_back(points_marker);
