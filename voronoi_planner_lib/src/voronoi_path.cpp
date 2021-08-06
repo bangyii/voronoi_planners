@@ -353,6 +353,7 @@ namespace voronoi_path
                     {
                         adj_list[node_num].push_back(candidate_node_num);
                         adj_list[candidate_node_num].push_back(node_num);
+                        connected = true;
 
                         //Check if this connection creates a cycle within N nodes threshold
                         std::vector<int> visited_list;
@@ -360,9 +361,9 @@ namespace voronoi_path
                         {
                             adj_list[node_num].pop_back();
                             adj_list[candidate_node_num].pop_back();
+                            connected = false;
                         }
 
-                        connected = true;
                         break;
                     }
                 }
@@ -775,7 +776,7 @@ namespace voronoi_path
         return true;
     }
 
-    void VoronoiPath::backtrack(std::vector<int> &path, double cur_dist, double last_branch_dist, const int &prev_node, const int &cur_node, std::vector<std::vector<int>> &paths, const double &backtrack_plan_threshold)
+    void VoronoiPath::backtrack(std::vector<int> &path, double cur_dist, const int &prev_node, const int &cur_node, std::vector<std::vector<int>> &paths, const double &backtrack_plan_threshold)
     {
         //Add cur_node to path
         path.push_back(cur_node);
@@ -804,17 +805,18 @@ namespace voronoi_path
         }
 
         //If open_list is empty, it means that this node is at a dead end before reaching distance threshold, add this path to the list
-        if(open_list.empty() && (cur_dist - last_branch_dist >= last_branch_dist_thresh / map_ptr->resolution))
+        // if(open_list.empty() && (cur_dist - last_branch_dist >= last_branch_dist_thresh / map_ptr->resolution))
+        if(open_list.empty())
             paths.push_back(path);
 
-        //This node is a branch, update last branch distance with current distance
-        if(open_list.size() >= 2)
-            last_branch_dist = cur_dist;
+        // //This node is a branch, update last branch distance with current distance
+        // if(open_list.size() >= 2)
+        //     last_branch_dist = cur_dist;
 
         //Visit all possible paths emanating from cur_node except in direction of prev_node
         while(!open_list.empty())
         {
-            backtrack(path, cur_dist, last_branch_dist, cur_node, open_list.back(), paths, backtrack_plan_threshold);
+            backtrack(path, cur_dist, cur_node, open_list.back(), paths, backtrack_plan_threshold);
 
             //Remove explored node from open list
             open_list.pop_back();
@@ -850,16 +852,6 @@ namespace voronoi_path
         GraphNode vec2 = path2->path.back() - start;
         double mag_diff = vec2.getMagnitude() - vec1.getMagnitude();
         double angle_diff = getMinAngleDiff(atan2(vec2.y, vec2.x), atan2(vec1.y, vec1.x));
-        // double angle_diff = atan2(vec2.y, vec2.x) - atan2(vec1.y, vec1.x);
-        // if(angle_diff > M_PI || angle_diff < -M_PI)
-        // {
-        //     int sign = angle_diff / fabs(angle_diff);
-        //     angle_diff = -sign * 2 * M_PI + angle_diff;
-        // }
-
-        //TODO: Handle this properly, magnitude may be different
-        // else if(fabs(angle_diff) < 0.005)
-        //     return false;
 
         int steps = ceil(fabs(angle_diff) / 0.01);  //TODO: Hardcoded angular step size
         double mag_step = mag_diff / steps;
@@ -981,7 +973,7 @@ namespace voronoi_path
         //Run exhaustive traversal of connected nodes until termination condition is met
         //Termination condition is distance threshold reached
         std::vector<int> path;
-        backtrack(path, 0, 0, -1, start_node, paths, backtrack_plan_threshold / map_ptr->resolution);
+        backtrack(path, 0, -1, start_node, paths, backtrack_plan_threshold / map_ptr->resolution);
 
         if(print_timings)
             section_profiler.print("backtrackPlan recursive backtrack");

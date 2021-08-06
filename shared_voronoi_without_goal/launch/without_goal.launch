@@ -1,0 +1,5 @@
+<launch>
+	<node name="shared_voronoi_without_goal" type="shared_voronoi_without_goal_node" pkg="shared_voronoi_without_goal" output="screen">
+		<rosparam command="load" file="$(find shared_voronoi_without_goal)/config/params.yaml"/>
+	</node>
+</launch>

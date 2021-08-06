@@ -273,10 +273,10 @@ namespace voronoi_path
          **/
         int node_depth_threshold = 5; 
 
-        /**
-         * Threshold distance in meters for last branch in order for deadend path to be considered
-         **/
-        double last_branch_dist_thresh = 2.5;
+        // /**
+        //  * Threshold distance in meters for last branch in order for deadend path to be considered
+        //  **/
+        // double last_branch_dist_thresh = 2.5;
 
         /**
          * Param for whether or not to use elastic band for path smoothing/contraction
@@ -627,13 +627,13 @@ namespace voronoi_path
          * Uses dfs and backtracking to find unique paths diverging out from robot position
          * @param path path vector for appending or removing nodes
          * @param cur_dist current distance from starting position
-         * @param last_branch_dist distance to last branch node from current position
+        //  * @param last_branch_dist distance to last branch node from current position
          * @param prev_node previous node, ie "where I came from"
          * @param cur_node current node number
          * @param paths vector of all paths. Appended to when the termination condition is met
          * @param backtrack_plan_threshold distance from start position to terminate the dfs planning
          **/
-        void backtrack(std::vector<int> &path, double cur_dist, double last_branch_dist, const int &prev_node, const int &cur_node, std::vector<std::vector<int>> &paths, const double &backtrack_plan_threshold);
+        void backtrack(std::vector<int> &path, double cur_dist, const int &prev_node, const int &cur_node, std::vector<std::vector<int>> &paths, const double &backtrack_plan_threshold);
 
         /**
          * Get minimum angle difference between 2 given angles. Output is between -PI & PI
