@@ -25,6 +25,7 @@ base_link_frame: base_link
 debug_path_id: false
 robot_radius: 0.3
 use_elastic_band: false
+backtrack_plan_threshold: 5 #Plan max length in meters
 
 num_optim_iterations: 3
 max_recursion_depth_approx_equi: 4

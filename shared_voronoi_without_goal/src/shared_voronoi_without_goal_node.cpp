@@ -42,9 +42,11 @@ bool readParams(ros::NodeHandle &nh)
 	nh.getParam("robot_radius", robot_radius);
 	nh.getParam("use_elastic_band", use_elastic_band);
 	nh.getParam("publish_path_names", publish_path_names);
+	nh.getParam("backtrack_plan_threshold", backtrack_plan_threshold);
 
 	//Set parameters for voronoi path object
 	v_path.h_class_threshold = h_class_threshold;
+	v_path.backtrack_plan_threshold = backtrack_plan_threshold;
 	v_path.print_timings = print_timings;
 	v_path.node_connection_threshold_pix = node_connection_threshold_pix;
 	v_path.min_node_sep_sq = min_node_sep_sq;

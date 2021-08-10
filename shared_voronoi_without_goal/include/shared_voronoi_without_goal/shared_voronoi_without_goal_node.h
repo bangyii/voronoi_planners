@@ -49,6 +49,11 @@ std::string base_link_frame = "base_link";
 double robot_radius = 0.3;
 bool use_elastic_band = true;
 
+/**
+ * Distance in meters before exhaustive path exploration terminates
+ **/
+double backtrack_plan_threshold = 5;
+
 // Parameters for eband optimization
 int num_optim_iterations_ = 3; ///<@brief maximal number of iteration steps during optimization of band
 double internal_force_gain_ = 1.0; ///<@brief gain for internal forces ("Elasticity of Band")
