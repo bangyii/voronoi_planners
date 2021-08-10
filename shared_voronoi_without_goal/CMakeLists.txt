@@ -24,7 +24,10 @@ find_package(catkin REQUIRED COMPONENTS
   voronoi_msgs_and_types
 )
 
-find_package(OpenCV 3 REQUIRED)
+find_package(OpenCV REQUIRED)
+if(NOT ${OpenCV_VERSION} GREATER_EQUAL "3")
+	message(SEND_ERROR "OpenCV 3+ required")
+endif()
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
