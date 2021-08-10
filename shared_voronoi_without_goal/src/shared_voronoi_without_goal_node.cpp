@@ -81,6 +81,8 @@ bool readParams(ros::NodeHandle &nh)
         v_path.significant_force_ = significant_force_;
         v_path.costmap_weight_ = costmap_weight_;
 	v_path.updateEBandParams();
+
+	return true;
 }
 
 void publishVoronoiViz()
