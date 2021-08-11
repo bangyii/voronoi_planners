@@ -309,8 +309,9 @@ namespace voronoi_path
                 }
             }
 
-            //Once both node indices are found, add edge between the two nodes if they aren't the same node
-            if (node_index[0] != node_index[1])
+            //Once both node indices are found, add edge between the two nodes if they aren't the same node and are not connected yet
+            bool unconnected = std::find(adj_list[node_index[0]].begin(), adj_list[node_index[0]].end(), node_index[1]) == adj_list[node_index[0]].end();
+            if (node_index[0] != node_index[1] && unconnected)
             {
                 adj_list[node_index[0]].push_back(node_index[1]);
                 adj_list[node_index[1]].push_back(node_index[0]);
