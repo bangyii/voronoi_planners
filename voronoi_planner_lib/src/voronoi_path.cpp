@@ -806,13 +806,8 @@ namespace voronoi_path
         }
 
         //If open_list is empty, it means that this node is at a dead end before reaching distance threshold, add this path to the list
-        // if(open_list.empty() && (cur_dist - last_branch_dist >= last_branch_dist_thresh / map_ptr->resolution))
         if(open_list.empty())
             paths.push_back(path);
-
-        // //This node is a branch, update last branch distance with current distance
-        // if(open_list.size() >= 2)
-        //     last_branch_dist = cur_dist;
 
         //Visit all possible paths emanating from cur_node except in direction of prev_node
         while(!open_list.empty())
@@ -995,106 +990,99 @@ namespace voronoi_path
         if(print_timings)
             section_profiler.print("backtrackPlan interpolate and contract");
 
-        std::vector<int> remove_ind;
+        //do-while loop to remove non-distinct paths among current time step paths
+        int remove_ind;
         auto prev_path_headings = getPathHeadings(previous_paths);
+
+        //Average headings pair is (heading, path index in all_path_nodes)
+        std::vector<std::pair<double, int>> sorted_average_headings = getPathHeadings(all_path_nodes);
+
+        //Average headings pair is (path index in all_path_nodes, heading)
+        const std::vector<std::pair<int, double>> average_headings_pair = flipPairVector<double, int>(sorted_average_headings);
+
+        //Sort the headings to get adjacent paths
+        std::sort(sorted_average_headings.begin(), sorted_average_headings.end());
+
+        //Get vector of path indices according to sorted order
+        std::vector<int> sorted_paths;
+        for (int j = 0; j < sorted_average_headings.size(); ++j)
+            sorted_paths.emplace_back(sorted_average_headings[j].second);
+
+        int iteration = 0;
         do{
             //Clear from previous iteration
-            remove_ind.clear();
-
-            //Sort paths by average heading
-            std::vector<std::pair<double, int>> average_headings_pair = getPathHeadings(all_path_nodes);
-
-            std::sort(average_headings_pair.begin(), average_headings_pair.end());
-            std::vector<Path> sorted_paths;
-            std::vector<double> sorted_average_headings;
-            for(int j = 0; j < average_headings_pair.size(); ++j)
-            {
-                sorted_paths.emplace_back(std::move(all_path_nodes[average_headings_pair[j].second]));
-                sorted_average_headings.push_back(average_headings_pair[j].first);
-            }
-            all_path_nodes = std::move(sorted_paths);
+            remove_ind = -1;
 
             //Check all paths with their adjacent paths
-            for(auto i = all_path_nodes.begin(); i < all_path_nodes.end(); ++i)
+            for(int k = 0; k < sorted_paths.size() && remove_ind == -1; ++k)
             {
-                auto path1 = i;
-                auto path2 = i + 1;
-                if(path2 == all_path_nodes.end())
-                {
-                    if(all_path_nodes.size() > 2)
-                        path2 = all_path_nodes.begin();
+                int path1_ind = sorted_paths[k];
+                int path2_ind = sorted_paths[(k + 1) % sorted_paths.size()];
+                auto path1 = all_path_nodes.begin() + path1_ind;
+                auto path2 = all_path_nodes.begin() + path2_ind;
 
-                    else 
-                        break;
-                }
+                //Don't compare if only 1 path is found
+                if(path1 == path2)
+                    break;
 
-                //Check if heading exceeds threshold
-                bool distinct = false;
-                int path1_ind = std::distance(all_path_nodes.begin(), path1);
-                int path2_ind = std::distance(all_path_nodes.begin(), path2);
-                double heading_diff = getMinAngleDiff(sorted_average_headings[path1_ind], sorted_average_headings[path2_ind], false);                //If headings greater than threshold, then distinct, otherwise check using interpolation and homotopy
-                if(fabs(heading_diff) < 30 && !isBacktrackDistinct(path1, path2))
+                //If headings greater than threshold, then distinct, otherwise check using interpolation and homotopy
+                double heading_diff = getMinAngleDiff(average_headings_pair[path1_ind].second, average_headings_pair[path2_ind].second, false);
+                if (fabs(heading_diff) < 30 && !isBacktrackDistinct(path1, path2))
                 {
                     //Path removal should favor the path that has close relative in previous time step to prevent oscillation
-                    std::vector<Path> candidate_paths;
-                    candidate_paths.push_back(*path1);
-                    candidate_paths.push_back(*path2);
-                    auto candidate_path_headings = getPathHeadings(candidate_paths);
+                    std::vector<double> candidate_path_headings(2);
+                    candidate_path_headings[0] = average_headings_pair[path1_ind].second;
+                    candidate_path_headings[1] = average_headings_pair[path2_ind].second;
 
-                    std::vector<double> mins;
-                    mins.resize(candidate_path_headings.size());
-                    for(int p = 0; p < candidate_path_headings.size(); ++p)
+                    std::vector<double> mins(candidate_path_headings.size());
+                    for (int p = 0; p < candidate_path_headings.size(); ++p)
                     {
                         double min = 1000000;
-                        for(int l = 0; l < prev_path_headings.size(); ++l)
+                        for (int l = 0; l < prev_path_headings.size(); ++l)
                         {
-                            double angle_diff = fabs(prev_path_headings[l].first - candidate_path_headings[p].first);
-                            if(angle_diff < min)
+                            double angle_diff = fabs(getMinAngleDiff(prev_path_headings[l].first, candidate_path_headings[p], false));
+                            if (angle_diff < min)
                                 min = angle_diff;
                         }
 
                         mins[p] = min;
                     }
 
-                    //If both are greater than 45deg, use distance instead
-                    if(mins[0] < 45 || mins[1] < 45)
-                    {
-                        //Path 1 has a nearer relative, erase path 2
-                        if(mins[0] < mins[1])
-                            remove_ind.push_back(std::distance(all_path_nodes.begin(), path2));
+                    double dist1 = pow(start.x - path1->path.back().x, 2) + pow(start.y - path1->path.back().y, 2);
+                    double dist2 = pow(start.x - path2->path.back().x, 2) + pow(start.y - path2->path.back().y, 2);
 
-                        else
-                            remove_ind.push_back(std::distance(all_path_nodes.begin(), path1));
-                    }
+                    //Path 1 has a nearer relative, and path 1 end is not a dead branch
+                    if (mins[0] < mins[1] && mins[0] < 25 && adj_list[paths[path1_ind].back()].size() != 1)
+                        remove_ind = path2_ind;
+
+                    //Path 2 has a nearer relative, and path 2 end is not a dead branch
+                    else if (mins[0] > mins[1] && mins[1] < 25 && adj_list[paths[path2_ind].back()].size() != 1)
+                        remove_ind = path1_ind;
+
+                    //Remove path that has endpoint nearer to robot position
+                    else if (dist1 < dist2)
+                        remove_ind = path1_ind;
 
                     else
-                    {
-                        //Remove path that has endpoint nearer to robot position
-                        double dist1 = sqrt(pow(start.x - path1->path.back().x, 2) + pow(start.y - path1->path.back().y, 2));
-                        double dist2 = sqrt(pow(start.x - path2->path.back().x, 2) + pow(start.y - path2->path.back().y, 2));
+                        remove_ind = path2_ind;
 
-                        //Erasing returns iterator of object AFTER erased object, -1 because for loop will increment again
-                        if(dist1 < dist2)
-                            remove_ind.push_back(std::distance(all_path_nodes.begin(), path1));
-
-                        else
-                            remove_ind.push_back(std::distance(all_path_nodes.begin(), path2));
-                    }
+                    //Find the iterator for remove_ind in sorted_paths
+                    if(remove_ind != -1)
+                        sorted_paths.erase(std::find(sorted_paths.begin(), sorted_paths.end(), remove_ind));
                 }
             }
+        } while(remove_ind != -1);
 
-            //Copy non-removed paths only
-            std::vector<Path> copy;
-            for(int i = 0; i < all_path_nodes.size(); ++i)
-            {
-                //This index is not to be removed
-                if(std::find(remove_ind.begin(), remove_ind.end(), i) == remove_ind.end())
-                    copy.emplace_back(std::move(all_path_nodes[i]));
-            }
-            all_path_nodes = std::move(copy);
-
-        } while(!remove_ind.empty());
-
+        // Copy non-removed paths only
+        std::vector<Path> copy;
+        for(int i = 0; i < all_path_nodes.size(); ++i)
+        {
+            //This index is not to be removed
+            if(std::find(sorted_paths.begin(), sorted_paths.end(), i) != sorted_paths.end())
+                copy.emplace_back(std::move(all_path_nodes[i]));
+        }
+        all_path_nodes = std::move(copy);
+            
         if(print_timings)
             section_profiler.print("backtrackPlan check unique");
 
@@ -1111,6 +1099,7 @@ namespace voronoi_path
 
         if(print_timings)
             complete_profiler.print("backtrackPlan total time");
+
         return all_path_nodes;
     }
 
