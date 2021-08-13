@@ -23,7 +23,7 @@ inflation_radius: 0.5
 inflation_blur_radius: 0.125
 base_link_frame: base_link
 debug_path_id: false
-robot_radius: 0.3
+robot_radius: 0.3 #Param used by eband optimization
 use_elastic_band: false
 backtrack_plan_threshold: 5 #Plan max length in meters
 
