@@ -519,9 +519,10 @@ namespace voronoi_path
          * Trim the beginning of path such that the starting node is directly connected to the node before X,
          * where X is the node that will cause a collision if the starting node is directly connected to
          * @param path path to trim
+         * @param allow_inflation function stops immediately if a node is in inflation if param is true, otherwise trimming continues
          * @return bool indicating success
          **/
-        bool contractPath(std::vector<GraphNode> &path);
+        bool contractPath(std::vector<GraphNode> &path, bool allow_inflation = false);
 
         /**
          * Find if any of the vertices are in concave area of costmap, causing the path to become stuck
@@ -534,9 +535,10 @@ namespace voronoi_path
         /** 
          * Interpolate paths before contraction to allow smoother result, uses the method above to achieve contraction
          * @param paths paths to contract
+         * @param allow_inflation function stops immediately if a node is in inflation if param is true, otherwise trimming continues
          * @return bool indicating success
          **/
-        bool interpolateContractPaths(std::vector<Path> &paths);
+        bool interpolateContractPaths(std::vector<Path> &paths, bool allow_inflation = false);
 
         /**
          * Checks if the two complex homotopy classes are outside the threshold, ie unique/different
@@ -623,11 +625,10 @@ namespace voronoi_path
         }
 
         /**
-         * Helper function for public method backtrackPlan
+         * Helper function for public method backtrackPlan. 
          * Uses dfs and backtracking to find unique paths diverging out from robot position
          * @param path path vector for appending or removing nodes
          * @param cur_dist current distance from starting position
-        //  * @param last_branch_dist distance to last branch node from current position
          * @param prev_node previous node, ie "where I came from"
          * @param cur_node current node number
          * @param paths vector of all paths. Appended to when the termination condition is met
@@ -636,7 +637,7 @@ namespace voronoi_path
         void backtrack(std::vector<int> &path, double cur_dist, const int &prev_node, const int &cur_node, std::vector<std::vector<int>> &paths, const double &backtrack_plan_threshold);
 
         /**
-         * Get minimum angle difference between 2 given angles. Output is between -PI & PI
+         * Get minimum angle difference between 2 given angles. Output is between -PI & PI. 
          * Equation is angle1 - angle2
          * @param angle1 first angle
          * @param angle2 second angle

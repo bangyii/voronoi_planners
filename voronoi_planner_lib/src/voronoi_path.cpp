@@ -522,7 +522,7 @@ namespace voronoi_path
         return hashed_int;
     }
 
-    bool VoronoiPath::interpolateContractPaths(std::vector<Path> &paths)
+    bool VoronoiPath::interpolateContractPaths(std::vector<Path> &paths, bool allow_inflation)
     {
         //Increase resolution of paths by interpolation before contracting to give smoother result
         interpolatePaths(paths, path_waypoint_sep);
@@ -530,7 +530,7 @@ namespace voronoi_path
         {
             for (auto &path : paths)
             {
-                contractPath(path.path);
+                contractPath(path.path, allow_inflation);
 
                 if(!backtrack_paths)
                     findStuckVertex(path.path);
@@ -645,7 +645,7 @@ namespace voronoi_path
         }
     }
 
-    bool VoronoiPath::contractPath(std::vector<GraphNode> &path)
+    bool VoronoiPath::contractPath(std::vector<GraphNode> &path, bool allow_inflation)
     {
         //Calculate minimum distance between two poses in path should have, distance in pix squared
         double waypoint_sep_sq = path_waypoint_sep * path_waypoint_sep / map_ptr->resolution / map_ptr->resolution;
@@ -685,12 +685,22 @@ namespace voronoi_path
             //Remove self collision node
             if(collision_node == anchor_node)
             {
-                if(anchor_node > 0)
-                    anchor_node--;
-                std::cout << "Self collision waypoint detected, erasing node " << collision_node << "\n";
-                path.erase(path.begin() + collision_node);
-                prev_collision_node = -1;
-                return false;
+                if(allow_inflation)
+                {
+                    anchor_node++;
+                    prev_collision_node = -1;
+                }
+
+                else
+                {
+                    if(anchor_node > 0)
+                        anchor_node--;
+                    std::cout << "Self collision waypoint detected, erasing node " << collision_node << "\n";
+                    path.erase(path.begin() + collision_node);
+                    prev_collision_node = -1;
+                }
+
+                continue;
             }
 
             //Preemptively set future_anchor_node, if another is found later on, this will be corrected
@@ -985,7 +995,7 @@ namespace voronoi_path
                 all_path_nodes[i].path.emplace_back(node_inf[node].x, node_inf[node].y);
         }
 
-        interpolateContractPaths(all_path_nodes);
+        interpolateContractPaths(all_path_nodes, true);
 
         if(print_timings)
             section_profiler.print("backtrackPlan interpolate and contract");
