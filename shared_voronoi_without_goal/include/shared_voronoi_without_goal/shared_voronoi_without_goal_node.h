@@ -10,6 +10,7 @@ ros::Subscriber global_map_sub;
 ros::Subscriber move_base_cancel_sub;
 ros::Publisher all_paths_pub;
 ros::Publisher edges_viz_pub;
+ros::Publisher robot_inflation_flag_pub;
 ros::Publisher map_pub;
 ros::Publisher all_paths_ind_pub;
 ros::WallTimer voronoi_update_timer;

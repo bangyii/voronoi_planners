@@ -76,6 +76,7 @@
   <exec_depend>slam_toolbox</exec_depend>
   <depend>voronoi_msgs_and_types</depend>
   <depend>voronoi_planner_lib</depend>
+  <depend>std_msgs</depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

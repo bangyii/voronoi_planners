@@ -10,6 +10,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <std_msgs/Bool.h>
 
 #include <voronoi_msgs_and_types/PathList.h>
 
@@ -242,6 +243,11 @@ void makePlan(const ros::WallTimerEvent &e)
 
 	GraphNode start_point;
 	map.worldToMap(robot_pose.position.x, robot_pose.position.y, start_point.x, start_point.y);
+	
+	//Publish flag indicating whether robot is in inflation for other nodes to process if required
+	std_msgs::Bool flag;
+	flag.data = (map.getCost(start_point.x, start_point.y) > trimming_collision_threshold);
+	robot_inflation_flag_pub.publish(flag);
 
 	//DFS planning
 	all_paths = v_path.backtrackPlan(start_point);
@@ -417,6 +423,7 @@ int main(int argc, char **argv)
 	all_paths_pub = nh.advertise<visualization_msgs::MarkerArray>("all_paths_viz", 1);
 	// user_direction_pub = nh.advertise<visualization_msgs::Marker>("user_direction_viz", 1);
 	edges_viz_pub = nh.advertise<visualization_msgs::MarkerArray>("voronoi_edges_viz", 1, true);
+	robot_inflation_flag_pub = nh.advertise<std_msgs::Bool>("robot_in_inflation", 1, true);
 
 	//Plan and voronoi diagram related topics
 	map_pub = nh.advertise<nav_msgs::OccupancyGrid>("/map_dilated", 1);
