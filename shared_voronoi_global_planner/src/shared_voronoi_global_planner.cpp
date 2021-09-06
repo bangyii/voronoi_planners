@@ -705,5 +705,31 @@ namespace shared_voronoi_global_planner
         v_path.lonely_branch_dist_threshold = lonely_branch_dist_threshold;
         v_path.path_waypoint_sep = path_waypoint_sep;
         v_path.path_vertex_angle_threshold = path_vertex_angle_threshold;
+
+        //Eband params
+        nh.getParam("use_elastic_band", use_elastic_band);
+        nh.getParam("num_optim_iterations", num_optim_iterations_);
+        nh.getParam("max_recursion_depth_approx_equi", max_recursion_depth_approx_equi_); 
+        nh.getParam("internal_force_gain", internal_force_gain_); 
+        nh.getParam("external_force_gain", external_force_gain_); 
+        nh.getParam("tiny_bubble_distance", tiny_bubble_distance_); 
+        nh.getParam("tiny_bubble_expansion", tiny_bubble_expansion_); 
+        nh.getParam("min_bubble_overlap", min_bubble_overlap_); 
+        nh.getParam("equilibrium_relative_overshoot", equilibrium_relative_overshoot_); 
+        nh.getParam("significant_force", significant_force_); 
+        nh.getParam("costmap_weight", costmap_weight_); 
+
+        v_path.use_elastic_band = use_elastic_band;
+        v_path.num_optim_iterations_ = num_optim_iterations_;
+        v_path.internal_force_gain_ = internal_force_gain_;
+        v_path.external_force_gain_ = external_force_gain_;
+        v_path.tiny_bubble_distance_ = tiny_bubble_distance_;
+        v_path.tiny_bubble_expansion_ = tiny_bubble_expansion_;
+        v_path.min_bubble_overlap_ = min_bubble_overlap_;
+        v_path.max_recursion_depth_approx_equi_ = max_recursion_depth_approx_equi_;
+        v_path.equilibrium_relative_overshoot_ = equilibrium_relative_overshoot_;
+        v_path.significant_force_ = significant_force_;
+        v_path.costmap_weight_ = costmap_weight_;
+        v_path.updateEBandParams();
     }
 } // namespace shared_voronoi_global_planner
